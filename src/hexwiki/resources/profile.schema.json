@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexwiki.invalid/schema/profile-v1.json",
+  "title": "HexWiki document profile scaffold",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"type": "string", "minLength": 1}
+  }
+}
+

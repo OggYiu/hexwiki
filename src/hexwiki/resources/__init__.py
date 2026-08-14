@@ -1,0 +1,2 @@
+"""Versioned HexWiki package resources."""
+
