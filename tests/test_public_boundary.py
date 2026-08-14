@@ -42,6 +42,8 @@ ALLOWED_TOP_LEVEL = frozenset(
     }
 )
 
+GENERATED_SDIST_TOP_LEVEL = frozenset({"PKG-INFO", "setup.cfg"})
+
 SKIPPED_DIRECTORIES = frozenset(
     {
         ".git",
@@ -208,14 +210,23 @@ def is_fixture(path: Path) -> bool:
     return len(relative.parts) >= 2 and relative.parts[:2] == ("tests", "fixtures")
 
 
+def is_extracted_sdist_tree() -> bool:
+    """Recognize only the two standard metadata files added by ``sdist``."""
+    return not (REPOSITORY_ROOT / ".git").exists() and all(
+        (REPOSITORY_ROOT / name).is_file() for name in GENERATED_SDIST_TOP_LEVEL
+    )
+
+
 class PublicBoundaryTests(unittest.TestCase):
     def test_only_approved_top_level_entries_exist(self) -> None:
+        sdist_tree = is_extracted_sdist_tree()
         unexpected = sorted(
             path.name
             for path in REPOSITORY_ROOT.iterdir()
             if path.name != ".git"
             and path.name not in SKIPPED_DIRECTORIES
             and path.name not in ALLOWED_TOP_LEVEL
+            and not (sdist_tree and path.name in GENERATED_SDIST_TOP_LEVEL)
         )
         self.assertEqual(unexpected, [])
 

@@ -77,7 +77,11 @@ def run(args: argparse.Namespace) -> int:
                         "%Y-%m-%d_%H-%M-%S"
                     )
                     audit = AuditLog(run_root / "actions.jsonl", run_id)
-                    recorder = TranscriptRecorder(run_root / "stage-transcripts", run_id)
+                    recorder = TranscriptRecorder(
+                        run_root / "stage-transcripts",
+                        run_id,
+                        secrets=(runtime.api_key,),
+                    )
                     network = network_preflight(
                         runtime=runtime,
                         run_root=run_root,
@@ -114,4 +118,4 @@ def run(args: argparse.Namespace) -> int:
         print(f"network: {report['network']}")
         for failure in failures:
             print(f"failure: {failure}")
-    return 0 if not failures else 1
+    return 0 if not failures else 3

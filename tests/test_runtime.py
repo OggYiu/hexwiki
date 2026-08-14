@@ -687,6 +687,11 @@ class RuntimeIntegrationTests(unittest.TestCase):
         ):
             self.assertTrue(any(label.startswith(prefix) for label in labels), prefix)
         self.assertEqual(inspect_run(smoke_dir)["terminal"]["state"], "passed")
+        self.assertGreaterEqual(len(smoke_child["independent_review"]["rounds"]), 2)
+        self.assertEqual(
+            smoke_child["independent_review"]["rounds"][0]["material_findings"],
+            1,
+        )
 
         build_dir = self.root / "build-run"
         output = self.root / "published-wiki"
@@ -705,8 +710,48 @@ class RuntimeIntegrationTests(unittest.TestCase):
         manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["validation_level"], "model-reviewed")
         self.assertEqual(manifest["model_run"]["mode"], "build")
+        before_status = {
+            path.relative_to(build_dir).as_posix(): sha256_file(path)
+            for path in build_dir.rglob("*")
+            if path.is_file()
+        }
         self.assertEqual(inspect_run(build_dir)["review_index"]["status"], "passed")
+        after_status = {
+            path.relative_to(build_dir).as_posix(): sha256_file(path)
+            for path in build_dir.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(after_status, before_status)
         self.assertFalse(any(output.parent.glob(f".{output.name}.*.candidate")))
+        build_child = json.loads(
+            (build_dir / "child-result.json").read_text(encoding="utf-8")
+        )
+        review_report = build_child["independent_review"]
+        self.assertEqual(review_report["page_coverage"], "complete")
+        self.assertEqual(review_report["coverage_across_rounds"], "complete")
+        self.assertEqual(review_report["rounds"][0]["material_findings"], 1)
+        self.assertEqual(review_report["rounds"][-1]["material_findings"], 0)
+        self.assertEqual(review_report["pages_reviewed"], [1, 2, 3])
+        self.assertNotEqual(
+            review_report["pages_reviewed"],
+            review_report["pages_reviewed_this_round"],
+        )
+        for path in review.semantic_notes(output):
+            metadata, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+            self.assertNotIn("verified", metadata, path)
+            self.assertTrue(metadata["sources"], path)
+            self.assertTrue(
+                all(
+                    isinstance(item, dict) and item.get("resource")
+                    for item in metadata["sources"]
+                ),
+                path,
+            )
+        secret = self.runtime.api_key.encode("utf-8")
+        for run_root in (smoke_dir, build_dir):
+            for path in run_root.rglob("*"):
+                if path.is_file():
+                    self.assertNotIn(secret, path.read_bytes(), path)
 
     def test_terminal_failure_categories_are_recorded(self) -> None:
         preflight_dir = self.root / "preflight-failure"
@@ -795,6 +840,83 @@ class RuntimeIntegrationTests(unittest.TestCase):
         )
         self.assertEqual((terminal["category"], terminal["exit_code"]), ("validation", 5))
         self.assertFalse((self.root / "blocked-output").exists())
+        retained = list(self.root.glob(".blocked-output.*.candidate"))
+        self.assertEqual(len(retained), 1)
+        self.assertTrue((retained[0] / "reports" / "independent-review.json").is_file())
+
+        def write_variant(name: str, **changes: Any) -> Path:
+            directory = self.root / name
+            directory.mkdir()
+            value = json.loads(valid_smoke.read_text(encoding="utf-8"))
+            value.update(changes)
+            target = directory / "smoke-report.json"
+            atomic_text(target, json.dumps(value, indent=2, sort_keys=True) + "\n")
+            checksum = sha256_file(target)
+            atomic_text(
+                directory / "smoke-report.sha256",
+                f"{checksum}  smoke-report.json\n",
+            )
+            run_record = json.loads(
+                (valid_smoke.parent / "run.json").read_text(encoding="utf-8")
+            )
+            atomic_text(directory / "run.json", json.dumps(run_record) + "\n")
+            atomic_text(
+                directory / "terminal.json",
+                json.dumps(
+                    {
+                        "state": "passed",
+                        "kind": "smoke",
+                        "smoke_report_sha256": checksum,
+                    }
+                )
+                + "\n",
+            )
+            return target
+
+        variants = (
+            (
+                "expired-smoke",
+                write_variant("expired-smoke-report", expires_at="2000-01-01T00:00:00+00:00"),
+                "expired",
+            ),
+            (
+                "failed-smoke",
+                write_variant("failed-smoke-report", status="failed"),
+                "failed",
+            ),
+            (
+                "mismatched-smoke",
+                write_variant("mismatched-smoke-report", binding_sha256="0" * 64),
+                "disagree",
+            ),
+        )
+        for run_name, report_path, message in variants:
+            with self.subTest(report=run_name), self.assertRaisesRegex(
+                ConfigurationFailure, message
+            ):
+                run_build(
+                    profile_path=self.profile_path,
+                    lock_path=self.lock_path,
+                    smoke_report_path=report_path,
+                    run_dir=self.root / run_name,
+                    output=self.root / f"{run_name}-output",
+                    runtime=self.runtime,
+                    services=_services(fail_preflight=True),
+                )
+            self.assertFalse((self.root / f"{run_name}-output").exists())
+
+        existing = self.root / "existing-output"
+        existing.mkdir()
+        with self.assertRaisesRegex(ConfigurationFailure, "already exists"):
+            run_build(
+                profile_path=self.profile_path,
+                lock_path=self.lock_path,
+                smoke_report_path=valid_smoke,
+                run_dir=self.root / "existing-output-run",
+                output=existing,
+                runtime=self.runtime,
+                services=_services(fail_preflight=True),
+            )
 
 
 if __name__ == "__main__":

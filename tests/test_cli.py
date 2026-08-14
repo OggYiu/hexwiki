@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import unittest
+from unittest.mock import patch
 
 from hexwiki.cli import COMMANDS, main
 
@@ -28,7 +29,24 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 0)
                 self.assertIn(command, output.getvalue())
 
+    def test_offline_preflight_passes_and_uses_the_documented_failure_code(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = main(["preflight", "--skip-network", "--json"])
+        self.assertEqual(result, 0)
+        self.assertIn('"status": "passed"', output.getvalue())
+
+        output = io.StringIO()
+        with (
+            patch("hexwiki.commands.preflight.shutil.which", return_value=None),
+            contextlib.redirect_stdout(output),
+        ):
+            result = main(
+                ["preflight", "--skip-network", "--require-poppler", "--json"]
+            )
+        self.assertEqual(result, 3)
+        self.assertIn('"status": "failed"', output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
-

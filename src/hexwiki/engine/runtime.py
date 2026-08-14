@@ -258,22 +258,41 @@ def network_preflight(
     recorder: TranscriptRecorder,
 ) -> dict[str, Any]:
     """Probe route discovery, chat, tool calling, sandbox, and observability separately."""
-    try:
-        from openai import OpenAI
-    except ImportError as error:
-        raise PreflightFailure(
-            "model runtime is unavailable; install HexWiki with the 'model' extra"
-        ) from error
     components: dict[str, Any] = {}
     started = time.monotonic()
+    current_component = "filesystem_sandbox"
+
+    def snapshot(status: str) -> dict[str, Any]:
+        report = {
+            "status": status,
+            "route": runtime.binding(),
+            "components": components,
+            "duration_seconds": round(time.monotonic() - started, 3),
+        }
+        path = run_root / "preflight" / "components.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(path, report)
+        return report
+
     try:
         components["filesystem_sandbox"] = _filesystem_preflight(run_root, recorder)
+        snapshot("running")
+        current_component = "model_runtime"
+        try:
+            from openai import OpenAI
+        except ImportError as error:
+            raise PreflightFailure(
+                "model runtime is unavailable; install HexWiki with the 'model' extra"
+            ) from error
+        components["model_runtime"] = {"status": "passed"}
+        snapshot("running")
         client = OpenAI(
             base_url=runtime.base_url,
             api_key=runtime.api_key,
             timeout=30,
             max_retries=0,
         )
+        current_component = "model_discovery"
         models = [item.id for item in client.models.list().data]
         if runtime.model not in models:
             raise PreflightFailure(
@@ -284,6 +303,8 @@ def network_preflight(
             "target": runtime.model,
             "model_count": len(models),
         }
+        snapshot("running")
+        current_component = "chat"
         response = client.chat.completions.create(
             model=runtime.model,
             messages=[
@@ -299,6 +320,8 @@ def network_preflight(
         if "HEXWIKI_PREFLIGHT_OK" not in content:
             raise PreflightFailure("chat preflight returned an unexpected response")
         components["chat"] = {"status": "passed", "response_marker": "matched"}
+        snapshot("running")
+        current_component = "tool_calling"
         tool_response = client.chat.completions.create(
             model=runtime.model,
             messages=[
@@ -333,12 +356,33 @@ def network_preflight(
         if arguments.get("value") != "ready":
             raise PreflightFailure("tool-calling preflight returned the wrong arguments")
         components["tool_calling"] = {"status": "passed", "tool": "hexwiki_probe"}
-    except PreflightFailure:
-        raise
+        snapshot("running")
     except BaseException as error:
-        raise PreflightFailure(
-            f"provider preflight failed: {type(error).__name__}: {error}"
-        ) from error
+        failure = (
+            error
+            if isinstance(error, PreflightFailure)
+            else PreflightFailure(
+                f"provider preflight failed: {type(error).__name__}: {error}"
+            )
+        )
+        components[current_component] = {
+            "status": "failed",
+            "error_type": type(error).__name__,
+            "error": str(error),
+        }
+        report = snapshot("failed")
+        audit.record(
+            phase="preflight",
+            action="fail_runtime_preflight_component",
+            what=f"Runtime preflight failed in {current_component!r}.",
+            why="Each required capability must pass before a model workflow can start.",
+            how="Stopped after retaining the exact component result and prior passed probes.",
+            status="failed",
+            details={"component": current_component, "report": report},
+        )
+        if failure is error:
+            raise failure
+        raise failure from error
 
     if runtime.observability_enabled:
         try:
@@ -360,12 +404,7 @@ def network_preflight(
     else:
         components["observability"] = {"status": "disabled", "required": False}
 
-    report = {
-        "status": "passed",
-        "route": runtime.binding(),
-        "components": components,
-        "duration_seconds": round(time.monotonic() - started, 3),
-    }
+    report = snapshot("passed")
     audit.record(
         phase="preflight",
         action="pass_runtime_preflight",
@@ -753,9 +792,7 @@ def _compile(
             profile_path=profile_path,
             lock_path=lock_path,
             raw_path=staged["raw_path"],
-            extraction_root=staged["profile"].extraction_root
-            if "profile" in staged
-            else staged["extraction_root"],
+            extraction_root=staged["extraction_root"],
             candidate=candidate,
             mode=mode,
             runtime=runtime,
@@ -818,7 +855,11 @@ def _start_run(
         raise ConfigurationFailure(f"profile/lock binding failed: {error}") from error
     run_id, run_root = _create_run_root(run_dir, kind)
     audit = AuditLog(run_root / "actions.jsonl", run_id)
-    recorder = TranscriptRecorder(run_root / "stage-transcripts", run_id)
+    recorder = TranscriptRecorder(
+        run_root / "stage-transcripts",
+        run_id,
+        secrets=(runtime.api_key,),
+    )
     started = time.monotonic()
     maximum = (
         runtime.limits.smoke_max_seconds

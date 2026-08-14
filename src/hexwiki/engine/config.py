@@ -271,8 +271,18 @@ def config_template() -> dict[str, Any]:
     }
 
 
-def _jsonable(value: Any) -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
+def _redacted_text(value: str, secrets: tuple[str, ...]) -> str:
+    result = value
+    for secret in secrets:
+        if secret:
+            result = result.replace(secret, "[REDACTED]")
+    return result
+
+
+def _jsonable(value: Any, secrets: tuple[str, ...] = ()) -> Any:
+    if isinstance(value, str):
+        return _redacted_text(value, secrets)
+    if value is None or isinstance(value, (int, float, bool)):
         return value
     if isinstance(value, Path):
         return str(value)
@@ -280,25 +290,32 @@ def _jsonable(value: Any) -> Any:
         return {
             str(key): "[REDACTED]"
             if str(key).casefold() in SENSITIVE_KEYS
-            else _jsonable(item)
+            else _jsonable(item, secrets)
             for key, item in value.items()
         }
     if isinstance(value, (list, tuple, set)):
-        return [_jsonable(item) for item in value]
+        return [_jsonable(item, secrets) for item in value]
     if hasattr(value, "model_dump"):
         try:
-            return _jsonable(value.model_dump(mode="json"))
+            return _jsonable(value.model_dump(mode="json"), secrets)
         except Exception:
             pass
-    return repr(value)
+    return _redacted_text(repr(value), secrets)
 
 
 class TranscriptRecorder:
     """Append-only, credential-redacted local records for model/tool boundaries."""
 
-    def __init__(self, root: Path, run_id: str) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_id: str,
+        *,
+        secrets: tuple[str, ...] = (),
+    ) -> None:
         self.root = Path(root).resolve()
         self.run_id = run_id
+        self._secrets = tuple(secret for secret in secrets if secret)
         self._lock = threading.Lock()
         self.root.mkdir(parents=True, exist_ok=True)
 
@@ -307,7 +324,7 @@ class TranscriptRecorder:
         record = {
             "time": datetime.now().astimezone().isoformat(timespec="milliseconds"),
             "run_id": self.run_id,
-            **_jsonable(value),
+            **_jsonable(value, self._secrets),
         }
         path = self.root / f"{safe}.jsonl"
         with self._lock:

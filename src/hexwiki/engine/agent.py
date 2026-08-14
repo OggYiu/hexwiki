@@ -13,11 +13,11 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol
 
 from . import lint, plan, review
-from .audit import AuditLog, atomic_json, atomic_text
+from .audit import AuditLog, atomic_json, atomic_text, sha256_file
 from .config import (
     RuntimeConfig,
     TranscriptRecorder,
@@ -65,7 +65,7 @@ class SandboxPolicy:
     IMMUTABLE_ROOTS = {"_ingest", "sources", "reference"}
 
     def __init__(self, root: Path) -> None:
-        self.root = Path(root).absolute()
+        self.root = Path(root).resolve(strict=False)
 
     @staticmethod
     def _canonical(path: Path) -> str:
@@ -76,11 +76,13 @@ class SandboxPolicy:
         if not isinstance(key, str) or not key.strip() or "\x00" in key:
             raise SandboxViolation("file path must be a non-empty string")
         normalized = key.replace("\\", "/")
+        if PureWindowsPath(normalized).drive:
+            raise SandboxViolation("drive-qualified paths are not allowed")
         candidate_key = normalized[1:] if normalized.startswith("/") else normalized
         parts = [part for part in candidate_key.split("/") if part not in {"", "."}]
         if not parts or any(part == ".." for part in parts) or parts[0].startswith("~"):
             raise SandboxViolation("path traversal is not allowed")
-        candidate = Path(os.path.normpath(self.root.joinpath(*parts)))
+        candidate = self.root.joinpath(*parts).resolve(strict=False)
         root_name = self._canonical(self.root)
         candidate_name = self._canonical(candidate)
         try:
@@ -182,6 +184,7 @@ class StageRequest:
     prompt: str
     expected_paths: tuple[str, ...] = ()
     payload: dict[str, Any] = field(default_factory=dict)
+    allow_unchanged: bool = False
 
     def __post_init__(self) -> None:
         if not self.label.strip() or not self.prompt.strip():
@@ -191,9 +194,16 @@ class StageRequest:
                 f"stage {self.label!r} names {len(self.expected_paths)} artifacts; maximum is two"
             )
         for path in self.expected_paths:
-            Pure = Path(path)
-            if Pure.is_absolute() or ".." in Pure.parts:
+            normalized = path.replace("\\", "/")
+            pure = PurePosixPath(normalized)
+            if pure.is_absolute() or PureWindowsPath(path).drive or ".." in pure.parts:
                 raise ValueError(f"stage output is not wiki-relative: {path}")
+        for key in ("files", "folders", "missing", "orphans"):
+            value = self.payload.get(key)
+            if isinstance(value, (list, tuple, set, dict)) and len(value) > NOTES_PER_WRITE_STAGE:
+                raise ValueError(
+                    f"stage {self.label!r} payload names {len(value)} {key}; maximum is two"
+                )
 
 
 class StageExecutor(Protocol):
@@ -286,6 +296,12 @@ class DeepAgentExecutor:
 
     def execute(self, request: StageRequest) -> str:
         started = time.monotonic()
+        before = {
+            relative: sha256_file(self.wiki_dir / relative)
+            if (self.wiki_dir / relative).is_file()
+            else None
+            for relative in request.expected_paths
+        }
         self.recorder.append(
             "stage-events",
             {
@@ -308,6 +324,17 @@ class DeepAgentExecutor:
                 if missing:
                     raise RuntimeError(
                         f"stage {request.label} returned without its named artifacts: {missing}"
+                    )
+                unchanged = [
+                    relative
+                    for relative, digest in before.items()
+                    if digest is not None
+                    and sha256_file(self.wiki_dir / relative) == digest
+                ]
+                if unchanged and not request.allow_unchanged:
+                    raise RuntimeError(
+                        f"stage {request.label} returned without materially changing "
+                        f"its named artifacts: {unchanged}"
                     )
                 self.recorder.append(
                     "stage-events",
@@ -345,6 +372,8 @@ def _execute(
     prompt: str,
     expected: tuple[str, ...] = (),
     payload: dict[str, Any] | None = None,
+    *,
+    allow_unchanged: bool = False,
 ) -> str:
     return executor.execute(
         StageRequest(
@@ -352,6 +381,7 @@ def _execute(
             prompt=prompt,
             expected_paths=expected,
             payload=payload or {},
+            allow_unchanged=allow_unchanged,
         )
     )
 
@@ -523,6 +553,7 @@ def run_survey(
                 "missed brief incidents; otherwise change nothing. Preserve all prior entries.",
                 (f"_plan/{filename}",),
                 {"kind": "episode-audit", "part": index, "known": known},
+                allow_unchanged=True,
             )
         try:
             return plan.load_inventory(plan_dir, profile, len(ranges))
@@ -815,7 +846,7 @@ def repair_lint(
                     date=date,
                     writer=writer,
                 ),
-                (),
+                tuple(names),
                 {"kind": "lint-repair", "files": names, "errors": subset},
             )
         sweep_strays(wiki_dir)
@@ -941,7 +972,7 @@ def review_and_repair(
                 executor,
                 f"review-repair:{round_index}.{batch_index}",
                 review.findings_prompt(group, date, writer),
-                (),
+                tuple(names),
                 {"kind": "review-repair", "files": names, "findings": group},
             )
         remaining_lint = repair_lint(executor, wiki_dir, date, writer)
@@ -1187,7 +1218,11 @@ def child_main(argv: list[str] | None = None) -> int:
     runtime_profile = profile.runtime(lock)
     runtime = load_runtime_config(require_network=True)
     run_dir = args.run_dir.resolve()
-    recorder = TranscriptRecorder(run_dir / "stage-transcripts", args.run_id)
+    recorder = TranscriptRecorder(
+        run_dir / "stage-transcripts",
+        args.run_id,
+        secrets=(runtime.api_key,),
+    )
     audit = AuditLog(run_dir / "child-actions.jsonl", args.run_id)
     timer = _hard_deadline(args.deadline_seconds)
     try:

@@ -337,7 +337,11 @@ def run_independent_review(
         {page for record in records for page in record.get("pages_cited", [])}
     )
     unreviewed = sorted(set(cited) - set(reviewed))
-    coverage = "partial" if skipped or reduced_notes else "complete"
+    coverage = (
+        "partial"
+        if skipped or reduced_notes or execution_status != "passed" or unreviewed
+        else "complete"
+    )
     report = {
         "reviewer": REVIEWER_ID,
         "round": round_label,

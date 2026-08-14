@@ -159,10 +159,28 @@ class OfflinePipelineTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "matched nothing"):
                 source.build_profile_lock(load_profile(bad_path))
 
+            missing_boundary = copy.deepcopy(_profile_value())
+            missing_boundary["scope"]["boundaries"][0]["marker"] = "ABSENT MARKER"
+            missing_boundary_path = root / "missing-boundary-profile.json"
+            missing_boundary_path.write_text(
+                json.dumps(missing_boundary) + "\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "boundary marker"):
+                source.build_profile_lock(load_profile(missing_boundary_path))
+
             lock = source.build_profile_lock(profile)
             exclusive_json(lock_path, lock)
             lock = load_profile_lock(lock_path)
             self.assertEqual(lock["scope"]["apparatus_entries"], [1, 2])
+
+            mismatched_value = copy.deepcopy(_profile_value())
+            mismatched_value["scope"]["label"] = "a different synthetic selection"
+            mismatched_path = root / "mismatched-profile.json"
+            mismatched_path.write_text(
+                json.dumps(mismatched_value, indent=2) + "\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "authored profile"):
+                source.verify_profile_lock(load_profile(mismatched_path), lock)
 
             native_page = extraction_root / "text/native-pages/page-0002.txt"
             original = native_page.read_bytes()
@@ -207,6 +225,12 @@ class OfflinePipelineTests(unittest.TestCase):
             )
             self.assertEqual(manifest["status"], "sealed")
             self.assertGreater(len(verify_checksums(candidate)), 10)
+            readme = candidate / "README.md"
+            pristine_readme = readme.read_bytes()
+            readme.write_bytes(pristine_readme + b"tampered\n")
+            with self.assertRaisesRegex(ValueError, "does not match the sealed wiki"):
+                verify_checksums(candidate)
+            readme.write_bytes(pristine_readme)
             self.assertEqual(lint.lint(candidate), [])
             self.assertEqual(okf.n_errors_of(okf.check_directory(candidate)["issues"]), 0)
             quotation_report = verify_quotes(candidate, 40)
