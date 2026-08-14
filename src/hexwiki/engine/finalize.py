@@ -285,6 +285,7 @@ def seal_wiki(
     audit: AuditLog,
     run_id: str,
     source_manifest: dict[str, Any],
+    model_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Re-verify source identity, run offline gates, and seal a fresh candidate."""
     wiki_dir = Path(wiki_dir)
@@ -302,26 +303,59 @@ def seal_wiki(
     lint_errors = lint.lint(wiki_dir)
     okf_report = okf.check_directory(wiki_dir)
     okf_errors = okf.n_errors_of(okf_report["issues"])
+    model_errors: list[str] = []
+    if model_evidence is not None:
+        mode = model_evidence.get("mode")
+        if mode not in {"smoke", "build"}:
+            model_errors.append("model evidence mode must be 'smoke' or 'build'")
+        independent = model_evidence.get("independent_review")
+        if not isinstance(independent, dict):
+            model_errors.append("independent review evidence is missing")
+        elif independent.get("execution_status") != "passed":
+            model_errors.append("independent review did not execute successfully")
+        if mode == "build" and isinstance(independent, dict):
+            if independent.get("finding_status") != "clear":
+                model_errors.append("independent review has material findings")
+            if independent.get("material_findings") != 0:
+                model_errors.append("independent review finding count is not zero")
+            if independent.get("page_coverage") != "complete":
+                model_errors.append("independent review page coverage is incomplete")
+            if independent.get("coverage_across_rounds") != "complete":
+                model_errors.append("independent review note/packet coverage is incomplete")
+            release = model_evidence.get("release_review")
+            if not isinstance(release, dict) or release.get("status") != "clear":
+                model_errors.append("release review did not clear the candidate")
+
     validation = {
-        "status": "passed" if not lint_errors and okf_errors == 0 else "failed",
-        "level": "deterministic",
-        "semantic_selection_quality": "not measured by offline gates",
+        "status": (
+            "passed"
+            if not lint_errors and okf_errors == 0 and not model_errors
+            else "failed"
+        ),
+        "level": "model-reviewed" if model_evidence is not None else "deterministic",
+        "semantic_selection_quality": (
+            "independent source support reviewed; reference alignment not measured"
+            if model_evidence is not None
+            else "not measured by offline gates"
+        ),
         "gateways": gateway_records,
         "lint_errors": lint_errors,
         "okf": okf_report,
+        "model_errors": model_errors,
     }
     reports = wiki_dir / "reports"
     atomic_json(reports / "deterministic-validation.json", validation)
     if validation["status"] != "passed":
         raise ValueError(
             f"deterministic wiki validation failed: lint={len(lint_errors)}, "
-            f"okf={okf_errors}; see {reports / 'deterministic-validation.json'}"
+            f"okf={okf_errors}, model={len(model_errors)}; "
+            f"see {reports / 'deterministic-validation.json'}"
         )
 
     manifest = {
         "status": "sealed",
-        "validation_level": "deterministic",
-        "semantic_selection_quality": "not measured",
+        "validation_level": validation["level"],
+        "semantic_selection_quality": validation["semantic_selection_quality"],
         "run_id": run_id,
         "hexwiki_version": __version__,
         "profile_id": profile.data["profile_id"],
@@ -333,6 +367,16 @@ def seal_wiki(
         "source_stage_sha256": source_manifest["raw_stage_sha256"],
         "deterministic_validation": "reports/deterministic-validation.json",
     }
+    if model_evidence is not None:
+        manifest["model_run"] = {
+            "mode": model_evidence["mode"],
+            "binding_sha256": model_evidence["binding_sha256"],
+            "route": model_evidence["route"],
+            "metrics": model_evidence.get("metrics", {}),
+            "smoke_report_sha256": model_evidence.get("smoke_report_sha256"),
+            "independent_review": "reports/independent-review.json",
+            "release_review": "reports/release-review.json",
+        }
     atomic_json(wiki_dir / "manifest.json", manifest)
     audit.record(
         phase="validation",

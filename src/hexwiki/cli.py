@@ -24,9 +24,13 @@ COMMANDS = {
 }
 
 ACTIVE_COMMANDS = {
+    "init": "hexwiki.commands.init",
     "extract": "hexwiki.commands.extract",
     "profile": "hexwiki.commands.profile",
     "preflight": "hexwiki.commands.preflight",
+    "smoke": "hexwiki.commands.smoke",
+    "build": "hexwiki.commands.build",
+    "status": "hexwiki.commands.status",
     "lint": "hexwiki.commands.lint",
     "verify": "hexwiki.commands.verify",
     "query": "hexwiki.commands.query",

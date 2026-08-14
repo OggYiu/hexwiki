@@ -7,15 +7,21 @@ import importlib.metadata
 import json
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from hexwiki.engine.profile import load_profile
+from hexwiki.engine.audit import AuditLog, exclusive_json
+from hexwiki.engine.config import ConfigError, TranscriptRecorder, load_runtime_config
+from hexwiki.engine.runtime import PreflightFailure, network_preflight
 from hexwiki.engine.source import inspect_source
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", type=Path)
     parser.add_argument("--skip-network", action="store_true")
+    parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--require-ocr", action="store_true")
     parser.add_argument("--require-poppler", action="store_true")
     parser.add_argument("--json", action="store_true", dest="as_json")
@@ -54,6 +60,34 @@ def run(args: argparse.Namespace) -> int:
             "status": "passed",
         }
 
+    network: Any = "skipped by operator" if args.skip_network else None
+    if not args.skip_network:
+        if args.run_dir is None:
+            failures.append("--run-dir is required for a networked preflight")
+        else:
+            run_root = args.run_dir.expanduser().resolve()
+            if run_root.exists():
+                failures.append(f"explicit preflight run directory already exists: {run_root}")
+            else:
+                try:
+                    runtime = load_runtime_config(require_network=True)
+                    run_root.parent.mkdir(parents=True, exist_ok=True)
+                    run_root.mkdir(exist_ok=False)
+                    run_id = "hexwiki-preflight-" + datetime.now().astimezone().strftime(
+                        "%Y-%m-%d_%H-%M-%S"
+                    )
+                    audit = AuditLog(run_root / "actions.jsonl", run_id)
+                    recorder = TranscriptRecorder(run_root / "stage-transcripts", run_id)
+                    network = network_preflight(
+                        runtime=runtime,
+                        run_root=run_root,
+                        audit=audit,
+                        recorder=recorder,
+                    )
+                    exclusive_json(run_root / "preflight-report.json", network)
+                except (ConfigError, PreflightFailure, OSError, ValueError) as error:
+                    failures.append(f"network preflight failed: {type(error).__name__}: {error}")
+
     report = {
         "status": "passed" if not failures else "failed",
         "python": sys.version.split()[0],
@@ -63,11 +97,7 @@ def run(args: argparse.Namespace) -> int:
         },
         "tools": {name: bool(path) for name, path in tools.items()},
         "profile": profile_report,
-        "network": (
-            "skipped by operator"
-            if args.skip_network
-            else "not checked by the deterministic preflight"
-        ),
+        "network": network,
         "failures": failures,
     }
     if args.as_json:
