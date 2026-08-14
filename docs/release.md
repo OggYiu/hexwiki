@@ -24,7 +24,9 @@ privilege-elevation step.
 
 1. Choose a three-component version and update `pyproject.toml`,
    `src/hexwiki/__init__.py`, and all three plugin manifests together.
-2. Run `python -m ruff check .` and `python -m pytest -q` from a complete clone.
+2. Install `.[dev,model]`, then run `python -m ruff check .` and
+   `python -m pytest -q` from a complete clone. Tests use a synthetic provider;
+   they do not make paid model calls.
 3. Confirm CI on Windows and Ubuntu for Python 3.11, 3.12, and 3.13. CI also
    clean-installs the wheel, Git-free source archive, and hosted commit archive.
 4. Review the release notes and the complete-history privacy scan.

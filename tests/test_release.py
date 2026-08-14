@@ -57,6 +57,7 @@ def test_ci_covers_supported_matrix_and_release_boundaries() -> None:
         assert command in text
     assert "id-token" not in text
     assert "sudo" not in text
+    assert '".[dev,model]"' in text
 
 
 def test_publish_is_manual_tag_bound_and_oidc_isolated() -> None:
@@ -79,6 +80,7 @@ def test_publish_is_manual_tag_bound_and_oidc_isolated() -> None:
     assert publish_step["uses"].startswith("pypa/gh-action-pypi-publish@")
     assert "username" not in publish_step.get("with", {})
     assert "password" not in publish_step.get("with", {})
+    assert '".[dev,model]"' in PUBLISH.read_text(encoding="utf-8")
 
 
 def test_all_external_actions_are_immutable_pins() -> None:

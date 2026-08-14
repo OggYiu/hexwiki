@@ -39,7 +39,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Install test dependencies
-        run: python -m pip install --disable-pip-version-check --editable ".[dev]"
+        run: python -m pip install --disable-pip-version-check --editable ".[dev,model]"
       - name: Lint
         run: python -m ruff check .
       - name: Test

@@ -7,6 +7,7 @@ packaging rather than one generated wiki.
 ## Offline checks
 
 ```text
+python -m pip install --editable ".[dev,model]"
 ruff check .
 python -m pytest -q
 python -m hexwiki --help
@@ -17,6 +18,10 @@ python path/to/validate_plugin.py .
 The last two commands use the validators bundled with the current Codex
 skill-creator and plugin-creator tools. Claude Code and Grok Build contributors
 should also run their installed `plugin validate` commands.
+
+The test suite exercises the guarded model boundary with synthetic calls, so
+both the `dev` and `model` extras are required even though no provider request
+is made.
 
 Do not add source PDFs, extracted pages, generated wikis, model transcripts,
 benchmarks, credentials, private endpoints, personal paths, or account details.

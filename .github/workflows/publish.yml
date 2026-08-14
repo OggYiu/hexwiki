@@ -70,7 +70,7 @@ jobs:
               raise SystemExit("Python and plugin versions are not synchronized")
           PY
       - name: Install release dependencies
-        run: python -m pip install --disable-pip-version-check ".[dev]"
+        run: python -m pip install --disable-pip-version-check ".[dev,model]"
       - name: Re-run release checks
         run: |
           python -m ruff check .
