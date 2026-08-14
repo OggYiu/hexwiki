@@ -172,7 +172,24 @@ PRIVATE_IPV4 = re.compile(
     r"192\.168\.\d{1,3}\.\d{1,3}|"
     r"172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?!\d)"
 )
+LOCAL_ENDPOINT = re.compile(
+    r"(?i)(?:https?://)?(?:"
+    + "local"
+    + "host"
+    + r"|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|\[?"
+    + "::"
+    + r"1\]?)(?::\d+)?(?:[/?#]|\b)"
+)
 SECRET_SHAPE = re.compile(r"(?i)\b(?:sk|key|token|secret)[-_][a-z0-9]{16,}\b")
+KNOWN_CREDENTIAL = re.compile(
+    r"(?:"
+    r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----|"
+    r"\bAKIA[A-Z0-9]{16}\b|"
+    r"\bgh[pousr]_[A-Za-z0-9]{20,}\b|"
+    r"\bgithub_pat_[A-Za-z0-9_]{40,}\b|"
+    r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
+    r")"
+)
 SAFE_EMAIL_DOMAINS = (".example", ".invalid", "example.com", "example.org", "example.net")
 
 
@@ -193,6 +210,23 @@ def ngram_hashes(value: str) -> set[str]:
         for index in range(len(tokens) - size + 1):
             hashes.add(digest(" ".join(tokens[index : index + size])))
     return hashes
+
+
+def privacy_findings(text: str) -> list[str]:
+    """Return public-boundary violations without echoing sensitive values."""
+    findings: list[str] = []
+    if WINDOWS_MACHINE_PATH.search(text) or POSIX_HOME_PATH.search(text):
+        findings.append("absolute machine path")
+    if PRIVATE_IPV4.search(text) or LOCAL_ENDPOINT.search(text):
+        findings.append("private network endpoint")
+    if SECRET_SHAPE.search(text) or KNOWN_CREDENTIAL.search(text):
+        findings.append("credential-shaped value")
+    for match in EMAIL_ADDRESS.finditer(text):
+        domain = match.group(0).rsplit("@", 1)[1].lower()
+        if not domain.endswith(SAFE_EMAIL_DOMAINS):
+            findings.append("non-placeholder email address")
+            break
+    return findings
 
 
 def repository_files() -> list[Path]:
@@ -263,17 +297,9 @@ class PublicBoundaryTests(unittest.TestCase):
                 continue
             relative = path.relative_to(REPOSITORY_ROOT).as_posix()
             text = path.read_text(encoding="utf-8", errors="replace")
-            if WINDOWS_MACHINE_PATH.search(text) or POSIX_HOME_PATH.search(text):
-                offenders.append(f"{relative}: absolute machine path")
-            if PRIVATE_IPV4.search(text):
-                offenders.append(f"{relative}: private network endpoint")
-            if SECRET_SHAPE.search(text):
-                offenders.append(f"{relative}: credential-shaped value")
-            for match in EMAIL_ADDRESS.finditer(text):
-                domain = match.group(0).rsplit("@", 1)[1].lower()
-                if not domain.endswith(SAFE_EMAIL_DOMAINS):
-                    offenders.append(f"{relative}: non-placeholder email address")
-                    break
+            offenders.extend(
+                f"{relative}: {finding}" for finding in privacy_findings(text)
+            )
         self.assertEqual(offenders, [])
 
     def test_generated_or_archival_artifacts_are_not_admitted(self) -> None:

@@ -17,13 +17,8 @@ from hexwiki import __version__
 from hexwiki.engine.profile import validate_profile
 from tests.test_public_boundary import (
     BANNED_HASHES,
-    EMAIL_ADDRESS,
-    POSIX_HOME_PATH,
-    PRIVATE_IPV4,
-    SAFE_EMAIL_DOMAINS,
-    SECRET_SHAPE,
-    WINDOWS_MACHINE_PATH,
     ngram_hashes,
+    privacy_findings,
 )
 
 
@@ -134,6 +129,8 @@ class PackagingTests(unittest.TestCase):
                 "README.md",
                 "MANIFEST.in",
                 "docs/adapters.md",
+                "docs/release.md",
+                "docs/release-notes-0.1.0.md",
                 "skills/hexwiki/SKILL.md",
                 "skills/hexwiki/agents/openai.yaml",
                 "src/hexwiki/resources/guide.md",
@@ -169,13 +166,7 @@ class PackagingTests(unittest.TestCase):
                     continue
                 text = content.decode("utf-8", errors="replace")
                 self.assertFalse(ngram_hashes(text).intersection(BANNED_HASHES), normalized)
-                self.assertIsNone(WINDOWS_MACHINE_PATH.search(text), normalized)
-                self.assertIsNone(POSIX_HOME_PATH.search(text), normalized)
-                self.assertIsNone(PRIVATE_IPV4.search(text), normalized)
-                self.assertIsNone(SECRET_SHAPE.search(text), normalized)
-                for match in EMAIL_ADDRESS.finditer(text):
-                    domain = match.group(0).rsplit("@", 1)[1].lower()
-                    self.assertTrue(domain.endswith(SAFE_EMAIL_DOMAINS), normalized)
+                self.assertEqual(privacy_findings(text), [], normalized)
 
             probe = (
                 "import json,sys; "

@@ -1,0 +1,110 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the leading v
+        required: true
+        type: string
+      confirmation:
+        description: Type publish-hexwiki exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Rebuild and verify the tagged release
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.confirmation == 'publish-hexwiki'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the selected tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Verify tag and package versions
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import tomllib
+
+          root = pathlib.Path.cwd()
+          expected = os.environ["RELEASE_VERSION"]
+          if not re.fullmatch(r"(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*)){2}", expected):
+              raise SystemExit("version must be a three-component release number")
+          if os.environ["RELEASE_REF"] != "v" + expected:
+              raise SystemExit("selected tag does not match the requested version")
+          metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+          versions = {metadata["project"]["version"]}
+          versions.add(
+              re.search(
+                  r'^__version__ = "([^"]+)"$',
+                  (root / "src/hexwiki/__init__.py").read_text(encoding="utf-8"),
+                  re.MULTILINE,
+              ).group(1)
+          )
+          for manifest in (
+              ".codex-plugin/plugin.json",
+              ".claude-plugin/plugin.json",
+              ".grok-plugin/plugin.json",
+          ):
+              versions.add(json.loads((root / manifest).read_text(encoding="utf-8"))["version"])
+          if versions != {expected}:
+              raise SystemExit("Python and plugin versions are not synchronized")
+          PY
+      - name: Install release dependencies
+        run: python -m pip install --disable-pip-version-check ".[dev]"
+      - name: Re-run release checks
+        run: |
+          python -m ruff check .
+          python -m pytest -q
+          hexwiki preflight --skip-network --json
+      - name: Build distributions
+        run: python -m build --wheel --sdist --outdir release-dist
+      - name: Validate package metadata
+        run: python -m twine check release-dist/*
+      - name: Upload verified distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pypi-distributions
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish through Trusted Publishing
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/hexwiki/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download verified distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pypi-distributions
+          path: release-dist/
+      - name: Publish without a long-lived upload token
+        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: release-dist/
