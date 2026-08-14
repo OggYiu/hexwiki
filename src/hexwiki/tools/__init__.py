@@ -1,0 +1,1 @@
+"""Offline HexWiki inspection tools."""

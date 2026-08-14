@@ -9,6 +9,7 @@ from importlib import resources
 from pathlib import Path
 
 from hexwiki import __version__
+from hexwiki.engine.profile import validate_profile
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,7 @@ class PackagingTests(unittest.TestCase):
         guide = package.joinpath("guide.md").read_text(encoding="utf-8")
         self.assertEqual(schema["properties"]["schema_version"]["const"], 1)
         self.assertEqual(example["schema_version"], 1)
+        validate_profile(example)
         self.assertIn("HexWiki", guide)
 
     def test_license_is_mit(self) -> None:
@@ -39,4 +41,3 @@ class PackagingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

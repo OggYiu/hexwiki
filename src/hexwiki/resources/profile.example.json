@@ -1,5 +1,57 @@
 {
   "schema_version": 1,
-  "profile_id": "synthetic-chapter"
+  "profile_id": "synthetic-selection",
+  "source": {
+    "pdf": "synthetic-source.pdf",
+    "extraction": "synthetic-source-extraction"
+  },
+  "document": {
+    "id": "synthetic-source",
+    "title": "A Synthetic Source",
+    "author": "Example Author"
+  },
+  "scope": {
+    "id": "selected-pages",
+    "title": "Selected pages",
+    "label": "selected PDF pages 1-2",
+    "primary_pages": [1, 2],
+    "apparatus_pages": [],
+    "apparatus": null,
+    "canonical_banners": {
+      "primary": "=== PRIMARY TEXT ===",
+      "apparatus": null
+    },
+    "boundaries": [],
+    "page_furniture": []
+  },
+  "architecture": {
+    "rationale": "The selected pages contain a short explanation with concepts but no narrated episodes.",
+    "minimums": {
+      "case_dossiers": null,
+      "concept_notes": 1,
+      "section_notes": 1,
+      "claims": 1,
+      "motifs": null
+    },
+    "nullable_rationales": {
+      "case_dossiers": "The selection explains ideas and does not narrate a discrete episode.",
+      "motifs": "Cross-episode recurrence is undefined because the selection contains no episodes."
+    },
+    "required_note_types": [
+      "Overview",
+      "Reading Guide",
+      "Chapter",
+      "Section",
+      "Case Dossier",
+      "Concept",
+      "Person",
+      "Synthesis",
+      "Source Guide",
+      "Open Question"
+    ]
+  },
+  "output": {
+    "format": "Open Knowledge Format",
+    "okf_version": "0.2"
+  }
 }
-

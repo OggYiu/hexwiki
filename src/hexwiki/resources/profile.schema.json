@@ -1,13 +1,212 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hexwiki.invalid/schema/profile-v1.json",
-  "title": "HexWiki document profile scaffold",
+  "title": "HexWiki document profile",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "profile_id"],
+  "required": [
+    "schema_version",
+    "profile_id",
+    "source",
+    "document",
+    "scope",
+    "architecture",
+    "output"
+  ],
   "properties": {
     "schema_version": {"const": 1},
-    "profile_id": {"type": "string", "minLength": 1}
+    "profile_id": {"$ref": "#/$defs/slug"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pdf", "extraction"],
+      "properties": {
+        "pdf": {"type": "string", "minLength": 1, "pattern": "\\.[pP][dD][fF]$"},
+        "extraction": {"type": "string", "minLength": 1}
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "author"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "title": {"type": "string", "minLength": 1},
+        "author": {"type": "string", "minLength": 1}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "label",
+        "primary_pages",
+        "apparatus_pages",
+        "apparatus",
+        "canonical_banners",
+        "boundaries",
+        "page_furniture"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "title": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "primary_pages": {"$ref": "#/$defs/nonEmptyPages"},
+        "apparatus_pages": {"$ref": "#/$defs/pages"},
+        "apparatus": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "label", "entry_range"],
+              "properties": {
+                "id": {"$ref": "#/$defs/slug"},
+                "label": {"type": "string", "minLength": 1},
+                "entry_range": {
+                  "type": "array",
+                  "prefixItems": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "integer", "minimum": 1}
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "entry_pattern": {"type": "string", "minLength": 1}
+              }
+            }
+          ]
+        },
+        "canonical_banners": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["primary", "apparatus"],
+          "properties": {
+            "primary": {"type": "string", "minLength": 1},
+            "apparatus": {"type": ["string", "null"]}
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["page", "marker", "keep", "action", "note"],
+            "properties": {
+              "page": {"type": "integer", "minimum": 1},
+              "marker": {"type": "string", "minLength": 1},
+              "keep": {"enum": ["before", "after"]},
+              "action": {"$ref": "#/$defs/slug"},
+              "note": {"type": "string", "minLength": 12}
+            }
+          }
+        },
+        "page_furniture": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pattern", "reason"],
+            "properties": {
+              "pattern": {"type": "string", "minLength": 1},
+              "reason": {"type": "string", "minLength": 12}
+            }
+          }
+        }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rationale",
+        "minimums",
+        "nullable_rationales",
+        "required_note_types"
+      ],
+      "properties": {
+        "rationale": {"type": "string", "minLength": 20},
+        "minimums": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "case_dossiers",
+            "concept_notes",
+            "section_notes",
+            "claims",
+            "motifs"
+          ],
+          "properties": {
+            "case_dossiers": {"$ref": "#/$defs/nullableMinimum"},
+            "concept_notes": {"$ref": "#/$defs/nullableMinimum"},
+            "section_notes": {"$ref": "#/$defs/nullableMinimum"},
+            "claims": {"$ref": "#/$defs/nullableMinimum"},
+            "motifs": {"$ref": "#/$defs/nullableMinimum"}
+          }
+        },
+        "nullable_rationales": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "case_dossiers": {"type": "string", "minLength": 20},
+            "concept_notes": {"type": "string", "minLength": 20},
+            "section_notes": {"type": "string", "minLength": 20},
+            "claims": {"type": "string", "minLength": 20},
+            "motifs": {"type": "string", "minLength": 20}
+          }
+        },
+        "required_note_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "Overview",
+              "Reading Guide",
+              "Chapter",
+              "Section",
+              "Case Dossier",
+              "Concept",
+              "Person",
+              "Synthesis",
+              "Source Guide",
+              "Open Question"
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "okf_version"],
+      "properties": {
+        "format": {"const": "Open Knowledge Format"},
+        "okf_version": {"const": "0.2"}
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "pages": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "nonEmptyPages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "nullableMinimum": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    }
   }
 }
-

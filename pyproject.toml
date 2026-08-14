@@ -20,7 +20,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Text Processing :: General",
 ]
-dependencies = []
+dependencies = [
+    "Pillow>=10,<13",
+    "PyMuPDF>=1.26,<2",
+]
 
 [project.optional-dependencies]
 dev = [

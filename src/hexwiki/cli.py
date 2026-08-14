@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import sys
 from collections.abc import Sequence
 
 from . import __version__
@@ -21,6 +23,15 @@ COMMANDS = {
     "query": "query a wiki without changing it",
 }
 
+ACTIVE_COMMANDS = {
+    "extract": "hexwiki.commands.extract",
+    "profile": "hexwiki.commands.profile",
+    "preflight": "hexwiki.commands.preflight",
+    "lint": "hexwiki.commands.lint",
+    "verify": "hexwiki.commands.verify",
+    "query": "hexwiki.commands.query",
+}
+
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(
@@ -30,7 +41,12 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--version", action="version", version=f"HexWiki {__version__}")
     subcommands = root.add_subparsers(dest="command", metavar="COMMAND")
     for name, description in COMMANDS.items():
-        subcommands.add_parser(name, help=description, description=description)
+        command = subcommands.add_parser(name, help=description, description=description)
+        module_name = ACTIVE_COMMANDS.get(name)
+        if module_name:
+            module = importlib.import_module(module_name)
+            module.configure(command)
+            command.set_defaults(_handler=module.run)
     return root
 
 
@@ -40,8 +56,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if namespace.command is None:
         command_parser.print_help()
         return 0
-    command_parser.error(
-        f"{namespace.command!r} is reserved but not available in this scaffold"
-    )
-    return 2
-
+    handler = getattr(namespace, "_handler", None)
+    if handler is None:
+        print(
+            f"error: {namespace.command!r} is reserved for a later implementation phase",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        return int(handler(namespace))
+    except (OSError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2

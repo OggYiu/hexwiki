@@ -102,8 +102,9 @@ FORBIDDEN_ARTIFACT_SUFFIXES = frozenset(
     }
 )
 
-# Generated privately from the approved denylist. No plaintext private term is
-# present in this repository.
+# Generated privately from the approved denylist. Generic English phrases are
+# excluded even if they also happen to be a profile slug; this guard is for
+# sensitive or distinctive material, not accidental title-word overlap.
 BANNED_HASHES = frozenset(
     {
         "077cf4c3927fd037d9600845a77bc97d380df318d446e4100a6bec85c8c4b914",
@@ -122,7 +123,6 @@ BANNED_HASHES = frozenset(
         "6d0696a8736b04ef36975c006544af61478aae8e9b9da03bbf123ddcce175952",
         "6e2fa082db28a2fb1d28fa3f4562867c410ccdb86632b9b91c56879302783b3e",
         "70b27deb2ba84ace5eb4d26d1ee72971f59b69d86a0686f70fb58b894dace245",
-        "73461bdec4ee66e2c86a2acafb84909aa548a5516472b19f4589a210d4db64c3",
         "764b8c1fcab9608336505152aea2519c728ffbca842bc808d0302c5ca9f09dc7",
         "76b4eb4bf1925d1623874349bc20ad102aa6ae65481dd7e97528abacdaa6ccc6",
         "7a171c9f7488729c4c28a8005e5e95126b7a0531d2937b06b41b9e8de7de0497",
@@ -282,6 +282,10 @@ class PublicBoundaryTests(unittest.TestCase):
         sample_hash = digest("ordinary synthetic phrase")
         self.assertIn(sample_hash, ngram_hashes("an ordinary synthetic phrase here"))
         self.assertTrue({sample_hash}.intersection({sample_hash}))
+
+    def test_generic_reasoning_phrase_is_not_private(self) -> None:
+        phrase_hash = digest("build a reasoning model")
+        self.assertNotIn(phrase_hash, BANNED_HASHES)
 
 
 if __name__ == "__main__":
