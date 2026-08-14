@@ -1,0 +1,16 @@
+{
+  "name": "hexwiki",
+  "version": "0.1.0",
+  "description": "Operate HexWiki's installed CLI to compile and audit source-bounded PDF wikis.",
+  "author": {
+    "name": "HexWiki contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "pdf",
+    "knowledge-wiki",
+    "provenance",
+    "audit"
+  ],
+  "skills": "./skills/"
+}

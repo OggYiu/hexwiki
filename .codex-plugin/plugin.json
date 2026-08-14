@@ -1,0 +1,29 @@
+{
+  "name": "hexwiki",
+  "version": "0.1.0",
+  "description": "Operate HexWiki's installed CLI to compile and audit source-bounded PDF wikis.",
+  "author": {
+    "name": "HexWiki contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "pdf",
+    "knowledge-wiki",
+    "provenance",
+    "audit"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HexWiki",
+    "shortDescription": "Build auditable source-bounded PDF wikis",
+    "longDescription": "Operate the installed HexWiki CLI for explicit PDF extraction, scope locking, guarded generation, review, and verification.",
+    "developerName": "HexWiki contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Local CLI workflow"
+    ],
+    "defaultPrompt": [
+      "Use HexWiki to compile this bounded PDF scope into an auditable wiki."
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "HexWiki"
+  short_description: "Build auditable source-bounded PDF wikis"
+  default_prompt: "Use $hexwiki to compile this PDF scope into an auditable wiki with the installed HexWiki CLI."

@@ -23,6 +23,7 @@ ALLOWED_TOP_LEVEL = frozenset(
     {
         ".claude-plugin",
         ".codex-plugin",
+        ".grok-plugin",
         ".env.example",
         ".gitattributes",
         ".github",

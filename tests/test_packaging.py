@@ -126,10 +126,16 @@ class PackagingTests(unittest.TestCase):
                     for member in members
                 }
             for required in (
+                ".claude-plugin/plugin.json",
+                ".codex-plugin/plugin.json",
+                ".grok-plugin/plugin.json",
                 "pyproject.toml",
                 "LICENSE",
                 "README.md",
                 "MANIFEST.in",
+                "docs/adapters.md",
+                "skills/hexwiki/SKILL.md",
+                "skills/hexwiki/agents/openai.yaml",
                 "src/hexwiki/resources/guide.md",
                 "src/hexwiki/resources/profile.schema.json",
                 "src/hexwiki/resources/profile.example.json",

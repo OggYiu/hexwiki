@@ -4,6 +4,8 @@ include CONTRIBUTING.md
 include LICENSE
 include README.md
 include SECURITY.md
+include .claude-plugin/plugin.json
+include .codex-plugin/plugin.json
+include .grok-plugin/plugin.json
 recursive-include docs *.md
 recursive-include skills *.md *.yaml
-
