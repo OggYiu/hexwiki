@@ -80,8 +80,15 @@ class SandboxPolicy:
             raise SandboxViolation("drive-qualified paths are not allowed")
         candidate_key = normalized[1:] if normalized.startswith("/") else normalized
         parts = [part for part in candidate_key.split("/") if part not in {"", "."}]
-        if not parts or any(part == ".." for part in parts) or parts[0].startswith("~"):
+        if any(part == ".." for part in parts) or (
+            parts and parts[0].startswith("~")
+        ):
             raise SandboxViolation("path traversal is not allowed")
+        if not parts:
+            # DeepAgents' virtual filesystem presents ``/`` as the backend root.
+            # Map root-only spellings to the candidate instead of treating them
+            # as host-absolute paths; resolved containment still guards children.
+            return self.root
         candidate = self.root.joinpath(*parts).resolve(strict=False)
         root_name = self._canonical(self.root)
         candidate_name = self._canonical(candidate)

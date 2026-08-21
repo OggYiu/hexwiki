@@ -50,6 +50,18 @@ class StubDeepAgentExecutor(DeepAgentExecutor):
 
 
 class SandboxTests(unittest.TestCase):
+    def test_policy_maps_virtual_root_without_weakening_containment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "candidate"
+            root.mkdir()
+            policy = SandboxPolicy(root)
+
+            self.assertEqual(policy.resolve("/"), root.resolve())
+            self.assertEqual(policy.resolve("."), root.resolve())
+            self.assertEqual(policy.resolve("/notes/item.md"), root / "notes" / "item.md")
+            with self.assertRaises(SandboxViolation):
+                policy.resolve("/../outside/escaped.md")
+
     def test_policy_rejects_traversal_and_resolved_symlink_escape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -87,6 +99,7 @@ class SandboxTests(unittest.TestCase):
             recorder = TranscriptRecorder(root / "transcripts", "sandbox-test")
             backend, delete_tool = _guarded_backend(root, recorder)
 
+            self.assertIsNotNone(backend.ls("/"))
             allowed = backend.write("notes/allowed.md", "allowed")
             self.assertFalse(getattr(allowed, "error", None))
             self.assertEqual((root / "notes" / "allowed.md").read_text(), "allowed")
