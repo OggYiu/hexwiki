@@ -213,6 +213,22 @@ class StageRequest:
                 )
 
 
+def _stage_prompt(request: StageRequest) -> str:
+    if not request.expected_paths:
+        return request.prompt
+    paths = ", ".join(f"`{path}`" for path in request.expected_paths)
+    unchanged = (
+        " If the stage explicitly permits no change, leave those exact files unchanged."
+        if request.allow_unchanged
+        else " Each named artifact must be created or materially updated."
+    )
+    return (
+        "ARTIFACT CONTRACT. The required artifact path(s) for this stage are exactly: "
+        f"{paths}. Do not substitute a similarly named path.{unchanged}\n\n"
+        + request.prompt
+    )
+
+
 class StageExecutor(Protocol):
     wiki_dir: Path
 
@@ -282,7 +298,7 @@ class DeepAgentExecutor:
         )
         final = ""
         for chunk in agent.stream(
-            {"messages": [{"role": "user", "content": request.prompt}]},
+            {"messages": [{"role": "user", "content": _stage_prompt(request)}]},
             config={
                 "recursion_limit": self.recursion_limit,
                 "callbacks": langchain_callbacks(self.runtime, self.recorder),
@@ -314,7 +330,7 @@ class DeepAgentExecutor:
             {
                 "event": "stage-started",
                 "stage": request.label,
-                "prompt": request.prompt,
+                "prompt": _stage_prompt(request),
                 "expected_paths": request.expected_paths,
                 "payload": request.payload,
             },

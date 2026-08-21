@@ -19,6 +19,14 @@ from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
+try:
+    from langchain_core.callbacks.base import BaseCallbackHandler
+except ImportError:
+    # Offline/base installs do not include the optional model runtime. The
+    # callback is instantiated only after that runtime has been required.
+    class BaseCallbackHandler:  # type: ignore[no-redef]
+        pass
+
 
 CONFIG_FILENAME = "config.json"
 SENSITIVE_KEYS = {
@@ -334,13 +342,14 @@ class TranscriptRecorder:
                 os.fsync(handle.fileno())
 
 
-class LocalPayloadCallback:
+class LocalPayloadCallback(BaseCallbackHandler):
     """LangChain-compatible callback that persists complete local payloads."""
 
     raise_error = False
     run_inline = True
 
     def __init__(self, recorder: TranscriptRecorder) -> None:
+        super().__init__()
         self.recorder = recorder
 
     def on_chat_model_start(

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from hexwiki.engine.config import (
     ConfigError,
+    LocalPayloadCallback,
     NonBlockingCallback,
     RuntimeConfig,
     RuntimeLimits,
@@ -37,6 +38,22 @@ def _runtime(root: Path, *, observability: bool = False) -> RuntimeConfig:
 
 
 class ConfigTests(unittest.TestCase):
+    def test_payload_callback_implements_current_langchain_handler_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            recorder = TranscriptRecorder(Path(temporary), "callback-contract")
+            callback = LocalPayloadCallback(recorder)
+            for attribute in (
+                "ignore_agent",
+                "ignore_chain",
+                "ignore_chat_model",
+                "ignore_custom_event",
+                "ignore_llm",
+                "ignore_retriever",
+                "ignore_retry",
+            ):
+                self.assertFalse(getattr(callback, attribute), attribute)
+            self.assertTrue(callable(callback.on_chain_start))
+
     def test_working_directory_dotenv_is_never_loaded(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

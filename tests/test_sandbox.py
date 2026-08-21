@@ -13,6 +13,7 @@ from hexwiki.engine.agent import (
     SandboxViolation,
     StageRequest,
     _guarded_backend,
+    _stage_prompt,
 )
 from hexwiki.engine.audit import atomic_text
 from hexwiki.engine.config import RuntimeConfig, RuntimeLimits, TranscriptRecorder
@@ -146,6 +147,11 @@ class SandboxTests(unittest.TestCase):
             StageRequest("stage", "prompt", ("../outside.md",))
         with self.assertRaisesRegex(ValueError, "wiki-relative"):
             StageRequest("stage", "prompt", ("Z:\\outside\\note.md",))
+
+        request = StageRequest("survey:outline", "survey", ("_plan/outline.json",))
+        rendered = _stage_prompt(request)
+        self.assertIn("`_plan/outline.json`", rendered)
+        self.assertIn("Do not substitute a similarly named path", rendered)
 
     def test_executor_retries_only_retryable_errors_and_requires_a_change(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
