@@ -9,7 +9,7 @@ a substitute compiler, or bypass the smoke/build contract.
 |---|---|---|---|
 | Codex | `.codex-plugin/plugin.json` | Validate the manifest and skill with the bundled validators | `$hexwiki` |
 | Claude Code | `.claude-plugin/plugin.json` | `claude plugin validate .`, then `claude --plugin-dir .` | `/hexwiki:hexwiki` |
-| Grok Build | `.claude-plugin/plugin.json` (Claude-compatible) | `grok plugin validate .`, then install or load the same plugin | `/hexwiki` or the extensions picker |
+| Grok Build | `.claude-plugin/plugin.json` (Claude-compatible) | `grok plugin validate .`, then `grok plugin install .` | `/hexwiki` or the extensions picker |
 
 Both manifests point to `./skills/` and carry the same package version. The
 skill’s command contract is identical on every host:
