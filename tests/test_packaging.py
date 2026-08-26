@@ -123,6 +123,8 @@ class PackagingTests(unittest.TestCase):
             for required in (
                 ".claude-plugin/plugin.json",
                 ".codex-plugin/plugin.json",
+                ".github/workflows/ci.yml",
+                ".github/workflows/publish.yml",
                 "pyproject.toml",
                 "LICENSE",
                 "README.md",
