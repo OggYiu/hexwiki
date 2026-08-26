@@ -23,7 +23,7 @@ privilege-elevation step.
 ## Candidate procedure
 
 1. Choose a three-component version and update `pyproject.toml`,
-   `src/hexwiki/__init__.py`, and all three plugin manifests together.
+   `src/hexwiki/__init__.py`, and both plugin manifests together.
 2. Install `.[dev,model]`, then run `python -m ruff check .` and
    `python -m pytest -q` from a complete clone. Tests use a synthetic provider;
    they do not make paid model calls.
