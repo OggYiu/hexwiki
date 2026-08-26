@@ -23,6 +23,7 @@ from tests.test_public_boundary import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+HISTORICAL_ONLY_TOP_LEVEL = frozenset({".grok-plugin"})
 
 
 def _git(*arguments: str, text: bool = False) -> bytes | str:
@@ -52,6 +53,9 @@ def _scan_text(label: str, text: str, offenders: list[str]) -> None:
 @pytest.mark.skipif(not (ROOT / ".git").exists(), reason="source archive has no Git history")
 def test_complete_reachable_git_history_is_public_safe() -> None:
     assert shutil.which("git"), "Git is required when a checkout contains .git"
+    assert HISTORICAL_ONLY_TOP_LEVEL.isdisjoint(ALLOWED_TOP_LEVEL)
+    assert all(not (ROOT / name).exists() for name in HISTORICAL_ONLY_TOP_LEVEL)
+    historical_allowed_top_level = ALLOWED_TOP_LEVEL.union(HISTORICAL_ONLY_TOP_LEVEL)
     commits = str(_git("rev-list", "--all", text=True)).splitlines()
     assert commits, "no reachable commits"
 
@@ -82,7 +86,7 @@ def test_complete_reachable_git_history_is_public_safe() -> None:
                 offenders.append(f"{label}: non-file tree entry {object_type}")
                 continue
             size = int(fields[3])
-            if not path.parts or path.parts[0] not in ALLOWED_TOP_LEVEL:
+            if not path.parts or path.parts[0] not in historical_allowed_top_level:
                 offenders.append(f"{label}: unapproved top-level path")
             if historical_forbidden.intersection(path.parts):
                 offenders.append(f"{label}: generated/private directory shape")

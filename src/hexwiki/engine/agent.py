@@ -437,6 +437,44 @@ def _survey_prompt(raw_name: str, task: str, schema: str, extra: str = "") -> st
     )
 
 
+def _survey_correction_targets(
+    message: str,
+    requests: list[tuple[str, str, str, dict[str, Any]]],
+) -> list[str]:
+    """Return only survey files implicated by a deterministic plan error."""
+    lowered = message.casefold()
+    direct = [
+        filename
+        for filename, label, _, _ in requests
+        if label in lowered or filename.casefold() in lowered
+    ]
+    if direct:
+        return direct
+
+    families: set[str] = set()
+    if "chapter" in lowered or (
+        "section" in lowered and "section_order" not in lowered
+    ):
+        families.add("outline")
+    if "episode" in lowered or "case_dossier" in lowered:
+        families.add("episodes")
+    if "concept" in lowered:
+        families.add("concepts")
+    if any(
+        token in lowered
+        for token in ("people", "person", "author", "claim", "motif")
+    ):
+        families.add("roster")
+
+    targeted = [
+        filename
+        for filename, label, _, _ in requests
+        if label in families
+        or ("episodes" in families and label.startswith("episodes-"))
+    ]
+    return targeted or [filename for filename, _, _, _ in requests]
+
+
 def run_survey(
     *,
     executor: StageExecutor,
@@ -527,7 +565,8 @@ def run_survey(
     corrections: dict[str, str] = {}
     for survey_attempt in range(1, attempts + 1):
         for filename, label, prompt, payload in requests:
-            if not (plan_dir / filename).is_file() or filename in corrections:
+            correcting = filename in corrections
+            if not (plan_dir / filename).is_file() or correcting:
                 correction = corrections.pop(filename, "")
                 _execute(
                     executor,
@@ -535,6 +574,7 @@ def run_survey(
                     prompt + correction,
                     (f"_plan/{filename}",),
                     payload,
+                    allow_unchanged=correcting,
                 )
         try:
             inventory = plan.load_inventory(plan_dir, profile, len(ranges))
@@ -546,12 +586,7 @@ def run_survey(
                 "\n\nCORRECTION. The deterministic plan validator rejected the prior file "
                 f"with: {message}. Rewrite only this file while preserving valid entries."
             )
-            targeted = [
-                filename
-                for filename, label, _, _ in requests
-                if label in message.casefold() or filename in message
-            ]
-            for filename in targeted or [item[0] for item in requests]:
+            for filename in _survey_correction_targets(message, requests):
                 corrections[filename] = correction
             continue
 

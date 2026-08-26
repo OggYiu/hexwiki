@@ -13,7 +13,7 @@ from typing import Any
 import pymupdf as fitz
 
 from hexwiki.engine import review, source
-from hexwiki.engine.agent import StageRequest
+from hexwiki.engine.agent import StageRequest, run_survey
 from hexwiki.engine.audit import atomic_text, exclusive_json, sha256_file
 from hexwiki.engine.config import RuntimeConfig, RuntimeLimits, TranscriptRecorder
 from hexwiki.engine.finalize import verify_checksums
@@ -560,6 +560,86 @@ class FakeReviewer:
                 ]
             }
         return {"findings": []}
+
+
+class SurveyCorrectionTests(unittest.TestCase):
+    def test_duplicate_episode_correction_targets_episodes_and_accepts_valid_noop(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            wiki_dir = Path(temporary)
+            plan_dir = wiki_dir / "_plan"
+            requests: list[StageRequest] = []
+
+            class DuplicateEpisodeExecutor:
+                def execute(self, request: StageRequest) -> str:
+                    requests.append(request)
+                    inventory = _inventory()
+                    kind = request.payload["kind"]
+                    relative = request.expected_paths[0]
+                    path = wiki_dir / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    existed = path.is_file()
+
+                    if kind == "outline":
+                        value = {
+                            "chapter": inventory["chapter"],
+                            "sections": inventory["sections"],
+                        }
+                    elif kind == "concepts":
+                        value = {"concepts": inventory["concepts"]}
+                    elif kind == "roster":
+                        value = {
+                            key: inventory[key]
+                            for key in ("people", "claims", "motifs")
+                        }
+                    elif kind == "episodes":
+                        part = request.payload["part"]
+                        if existed:
+                            if not request.allow_unchanged:
+                                raise AssertionError("correction must permit a valid no-op")
+                            if part == 1:
+                                return "kept the valid first episode file"
+                            value = {"episodes": []}
+                        else:
+                            episode = dict(inventory["episodes"][0])
+                            episode["pdf_pages"] = [part]
+                            value = {"episodes": [episode]}
+                    elif kind == "episode-audit":
+                        if not request.allow_unchanged:
+                            raise AssertionError("episode audit must permit a no-op")
+                        return "no missed episodes"
+                    else:
+                        raise AssertionError(f"unexpected survey kind: {kind}")
+
+                    atomic_text(path, json.dumps(value, indent=2) + "\n")
+                    return f"wrote {relative}"
+
+            profile_path = wiki_dir / "profile.json"
+            atomic_text(profile_path, json.dumps(_profile(), indent=2) + "\n")
+            profile = load_profile(profile_path).runtime()
+            result = run_survey(
+                executor=DuplicateEpisodeExecutor(),
+                raw_name="synthetic-source.md",
+                plan_dir=plan_dir,
+                profile=profile,
+            )
+
+            self.assertEqual(result["episodes"], _inventory()["episodes"])
+            labels = [request.label for request in requests]
+            self.assertEqual(labels.count("survey:outline"), 1)
+            self.assertEqual(labels.count("survey:concepts"), 1)
+            self.assertEqual(labels.count("survey:roster"), 1)
+            self.assertEqual(labels.count("survey:episodes-1"), 2)
+            self.assertEqual(labels.count("survey:episodes-2"), 2)
+            corrected = [
+                request
+                for request in requests
+                if request.label.startswith("survey:episodes-")
+                and "CORRECTION." in request.prompt
+            ]
+            self.assertEqual(len(corrected), 2)
+            self.assertTrue(all(request.allow_unchanged for request in corrected))
 
 
 def _runtime(root: Path) -> RuntimeConfig:
