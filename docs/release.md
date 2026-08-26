@@ -35,8 +35,8 @@ privilege-elevation step.
    `publish-hexwiki`. Review the protected-environment prompt before approving
    the OIDC publish job.
 7. Only after PyPI verification, create the matching hosted release and test
-   `uvx hexwiki --help`, `uv tool install hexwiki`, and each adapter from its
-   remote source.
+   `uvx hexwiki --help`, `uv tool install hexwiki`, and every tagged remote
+   adapter command documented in `docs/adapters.md` from a fresh conversation.
 
 The workflow refuses a branch, a mismatched tag/version, an unsynchronized
 plugin version, a failed test, or invalid distribution metadata. GitHub-hosted
@@ -51,6 +51,7 @@ Before a release, run the current native validator for each installed host:
 python path/to/quick_validate.py skills/hexwiki
 python path/to/plugin-creator/scripts/validate_plugin.py .
 claude plugin validate .
+claude plugin validate .claude-plugin/marketplace.json --strict
 grok plugin validate .
 ```
 
@@ -61,8 +62,7 @@ The current Codex CLI manages plugin marketplaces but does not expose a
 `plugin validate` subcommand; its plugin-creator package supplies the canonical
 manifest validator used above.
 
-Claude's repository-wide validation may report the contributor-only root
-`CLAUDE.md`. For strict plugin validation, stage only `.claude-plugin/` and
-`skills/` into a clean directory and validate that bundle. There is no
-marketplace manifest in this repository; adding or submitting one requires a
-separate operator decision.
+Validate both the complete checkout and an isolated bundle containing the
+plugin manifests and `skills/` tree. The contributor-only root `CLAUDE.md` is
+not plugin runtime context. The repository marketplace points to the root
+plugin and must pass strict catalog validation before publication.

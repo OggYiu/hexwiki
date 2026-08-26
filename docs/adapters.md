@@ -30,11 +30,28 @@ Grok Build officially reads Claude Code plugins with no extra configuration,
 so HexWiki deliberately reuses `.claude-plugin/plugin.json`. It does not ship an
 undocumented duplicate `.grok-plugin` manifest.
 
-No marketplace entry is included. Marketplace installation, fresh-conversation
-model testing, tagging, and publication are operator-controlled release steps.
+`.claude-plugin/marketplace.json` publishes the same root plugin through a
+repository-hosted `hexwiki` marketplace. Claude Code and Grok Build therefore
+install the same manifest and skill instead of packaging adapter-specific
+implementations. Fresh-conversation model testing, tagging, and publication
+remain release gates.
 
-This source repository has a root `CLAUDE.md` for contributor governance.
-Claude's validator correctly warns that a plugin does not load that file as
-plugin context; the skill carries all runtime instructions. Release validation
-also stages only the manifest and `skills/` tree and validates that isolated
-plugin bundle with `--strict`.
+After the `v0.1.0` release tag is public, install the pinned adapter source with
+the host's native commands:
+
+```text
+# Codex
+codex plugin marketplace add OggYiu/hexwiki --ref v0.1.0
+codex plugin add hexwiki@hexwiki
+
+# Claude Code
+claude plugin marketplace add OggYiu/hexwiki@v0.1.0
+claude plugin install hexwiki@hexwiki
+
+# Grok Build
+grok plugin install OggYiu/hexwiki@v0.1.0 --trust
+```
+
+Pinning the tag makes every host load the same reviewed files. The source
+repository's root `CLAUDE.md` is contributor governance, not plugin runtime
+context; all runtime instructions are contained in `skills/hexwiki/SKILL.md`.

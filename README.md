@@ -107,6 +107,7 @@ directories, and wikis. See [security and data](docs/security-and-data.md).
 - [Model and quality support matrix](docs/model-support.md)
 - [Codex, Claude Code, and Grok Build adapters](docs/adapters.md)
 - [Security and data handling](docs/security-and-data.md)
+- [Terms of use](docs/terms.md)
 - [Release process and publishing guardrails](docs/release.md)
 - [0.1.0 release-candidate notes](docs/release-notes-0.1.0.md)
 

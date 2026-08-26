@@ -7,6 +7,8 @@
   "author": {
     "name": "HexWiki contributors"
   },
+  "homepage": "https://github.com/OggYiu/hexwiki#readme",
+  "repository": "https://github.com/OggYiu/hexwiki",
   "license": "MIT",
   "keywords": [
     "pdf",

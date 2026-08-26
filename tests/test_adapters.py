@@ -13,6 +13,7 @@ MANIFESTS = (
     ROOT / ".codex-plugin" / "plugin.json",
     ROOT / ".claude-plugin" / "plugin.json",
 )
+MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 
 
 def _skill_front_matter(text: str) -> dict[str, str]:
@@ -35,6 +36,25 @@ def test_all_host_manifests_share_one_skill_and_version() -> None:
         assert "mcpServers" not in manifest
         assert "apps" not in manifest
         assert "hooks" not in manifest
+        assert manifest["homepage"] == "https://github.com/OggYiu/hexwiki#readme"
+        assert manifest["repository"] == "https://github.com/OggYiu/hexwiki"
+
+    codex = json.loads(MANIFESTS[0].read_text(encoding="utf-8"))
+    interface = codex["interface"]
+    assert interface["websiteURL"] == "https://github.com/OggYiu/hexwiki"
+    assert interface["privacyPolicyURL"].endswith("/docs/security-and-data.md")
+    assert interface["termsOfServiceURL"].endswith("/docs/terms.md")
+    assert interface["brandColor"] == "#0B2E63"
+    for field in ("composerIcon", "logo"):
+        asset = ROOT / interface[field].removeprefix("./")
+        assert asset == ROOT / "assets" / "hexwiki-logo.png"
+        assert asset.is_file()
+    assert interface["defaultPrompt"] == [
+        "Compile this bounded PDF scope into an auditable HexWiki.",
+        "Check and lock my HexWiki profile, then run offline preflight.",
+        "Monitor this HexWiki run until its terminal result is available.",
+    ]
+    assert all(len(prompt) <= 128 for prompt in interface["defaultPrompt"])
 
 
 def test_portable_skill_delegates_to_the_cli() -> None:
@@ -75,6 +95,19 @@ def test_grok_reuses_the_supported_claude_compatible_plugin() -> None:
     assert not (ROOT / ".grok-plugin").exists()
     assert "Grok Build officially reads Claude Code plugins" in docs
     assert "undocumented duplicate `.grok-plugin`" in docs
+
+
+def test_claude_and_grok_marketplace_catalog_points_to_the_same_plugin() -> None:
+    catalog = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
+    assert catalog["name"] == "hexwiki"
+    assert catalog["owner"]["name"] == "HexWiki contributors"
+    assert catalog["version"] == hexwiki.__version__
+    assert len(catalog["plugins"]) == 1
+    plugin = catalog["plugins"][0]
+    assert plugin["name"] == "hexwiki"
+    assert plugin["source"] == "./"
+    assert plugin["version"] == hexwiki.__version__
+    assert plugin["strict"] is True
 
 
 def test_public_docs_do_not_overclaim_model_quality() -> None:

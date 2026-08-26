@@ -1,0 +1,32 @@
+{
+  "name": "hexwiki",
+  "owner": {
+    "name": "HexWiki contributors",
+    "url": "https://github.com/OggYiu/hexwiki"
+  },
+  "description": "Install the HexWiki CLI adapter for source-bounded PDF wiki workflows.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "hexwiki",
+      "source": "./",
+      "displayName": "HexWiki",
+      "description": "Operate HexWiki's installed CLI to compile and audit source-bounded PDF wikis.",
+      "version": "0.1.0",
+      "author": {
+        "name": "HexWiki contributors"
+      },
+      "homepage": "https://github.com/OggYiu/hexwiki#readme",
+      "repository": "https://github.com/OggYiu/hexwiki",
+      "license": "MIT",
+      "keywords": [
+        "pdf",
+        "knowledge-wiki",
+        "provenance",
+        "audit"
+      ],
+      "category": "Productivity",
+      "strict": true
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">HexWiki logo</title>
+  <desc id="description">An open book enclosed by a hexagonal source boundary.</desc>
+  <path d="M256 28 456 142v228L256 484 56 370V142Z" fill="none" stroke="#0B2E63" stroke-width="34" stroke-linejoin="round"/>
+  <path d="M112 157c52 0 99 17 132 47v161c-35-28-79-42-132-42Z" fill="#0B2E63"/>
+  <path d="M400 157c-52 0-99 17-132 47v161c35-28 79-42 132-42Z" fill="#10A7A5"/>
+</svg>

@@ -93,12 +93,23 @@ def test_all_external_actions_are_immutable_pins() -> None:
 
 def test_release_version_and_limitations_are_synchronized() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert metadata["project"]["urls"] == {
+        "Homepage": "https://github.com/OggYiu/hexwiki",
+        "Documentation": "https://github.com/OggYiu/hexwiki#readme",
+        "Source": "https://github.com/OggYiu/hexwiki",
+        "Issues": "https://github.com/OggYiu/hexwiki/issues",
+    }
     versions = {metadata["project"]["version"], hexwiki.__version__}
     for manifest in (
         ROOT / ".codex-plugin" / "plugin.json",
         ROOT / ".claude-plugin" / "plugin.json",
     ):
         versions.add(json.loads(manifest.read_text(encoding="utf-8"))["version"])
+    marketplace = json.loads(
+        (ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
+    )
+    versions.add(marketplace["version"])
+    versions.update(plugin["version"] for plugin in marketplace["plugins"])
     assert versions == {"0.1.0"}
 
     notes = (ROOT / "docs" / "release-notes-0.1.0.md").read_text(encoding="utf-8")

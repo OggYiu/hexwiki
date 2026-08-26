@@ -4,6 +4,12 @@ HexWiki processes material supplied by the operator. Confirm that you have the
 right to extract it, send the selected scope to a model provider, retain local
 copies, and distribute any resulting wiki.
 
+This policy is effective 2026-08-26 and applies to the HexWiki CLI and its
+Codex, Claude Code, and Grok Build adapters. The adapters contain instructions
+for operating the local CLI. They do not provide a hosted HexWiki service, run
+an MCP server, or send source material, prompts, credentials, or usage records
+to HexWiki contributors.
+
 ## What leaves the machine
 
 During networked preflight, smoke, and build, the configured provider receives
@@ -14,6 +20,11 @@ Langfuse receives observability payloads only when separately installed,
 configured, and enabled. It is non-authoritative: initialization, callback, or
 flush failures are contained and cannot alter retries, validation, output, or
 exit status.
+
+The model provider and any optional observability provider are selected and
+configured by the operator. Their independent terms and privacy policies apply
+to data sent to them. HexWiki contributors do not control those services or
+receive their account records.
 
 No network request is made by extraction, profile checking/locking, offline
 preflight, lint, verify, query, or status unless a dependency outside HexWiki
@@ -32,6 +43,19 @@ review packets, failed candidates, and published wikis remain on local storage
 until the operator removes them. Choose explicit private paths, restrict their
 permissions, include them in backup/retention policy, and inspect them before
 sharing.
+
+Because HexWiki contributors do not receive or host these records, they cannot
+retrieve or delete them for the operator. Delete local records with the
+operating system or storage service that holds the explicit paths, and use each
+configured provider's account controls for provider-held data. Preserve an
+audit run when it is still needed to investigate a failure or support a claim.
+
+## Questions and security reports
+
+Use the repository's security policy and private vulnerability-reporting path
+for security issues. General questions may use GitHub Issues, but never post a
+credential, private source passage, transcript, account identifier, or personal
+data in a public issue.
 
 ## Source privacy
 

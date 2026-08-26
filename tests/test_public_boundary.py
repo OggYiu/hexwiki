@@ -34,6 +34,7 @@ ALLOWED_TOP_LEVEL = frozenset(
         "MANIFEST.in",
         "README.md",
         "SECURITY.md",
+        "assets",
         "docs",
         "pyproject.toml",
         "skills",
@@ -41,6 +42,15 @@ ALLOWED_TOP_LEVEL = frozenset(
         "tests",
     }
 )
+
+APPROVED_ASSET_SHA256 = {
+    "assets/hexwiki-logo.png": (
+        "e6f7df91e3377ccd23cf9be75af5613b40d7aa6720dbca2100131765d770a030"
+    ),
+    "assets/hexwiki-logo.svg": (
+        "c9022ff8654034343fe0799b9fe924d1b02ffdd9e317dbbc0e4ceb97e57be8b6"
+    ),
+}
 
 GENERATED_SDIST_TOP_LEVEL = frozenset({"PKG-INFO", "setup.cfg"})
 
@@ -263,6 +273,17 @@ class PublicBoundaryTests(unittest.TestCase):
             and not (sdist_tree and path.name in GENERATED_SDIST_TOP_LEVEL)
         )
         self.assertEqual(unexpected, [])
+
+    def test_only_reviewed_public_assets_exist(self) -> None:
+        assets = REPOSITORY_ROOT / "assets"
+        actual = {
+            path.relative_to(REPOSITORY_ROOT).as_posix(): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for path in assets.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(actual, APPROVED_ASSET_SHA256)
 
     def test_no_forbidden_private_directory_shape_exists(self) -> None:
         offenders: list[str] = []

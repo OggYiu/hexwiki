@@ -121,10 +121,13 @@ class PackagingTests(unittest.TestCase):
                     for member in members
                 }
             for required in (
+                ".claude-plugin/marketplace.json",
                 ".claude-plugin/plugin.json",
                 ".codex-plugin/plugin.json",
                 ".github/workflows/ci.yml",
                 ".github/workflows/publish.yml",
+                "assets/hexwiki-logo.png",
+                "assets/hexwiki-logo.svg",
                 "pyproject.toml",
                 "LICENSE",
                 "README.md",
@@ -132,6 +135,8 @@ class PackagingTests(unittest.TestCase):
                 "docs/adapters.md",
                 "docs/release.md",
                 "docs/release-notes-0.1.0.md",
+                "docs/security-and-data.md",
+                "docs/terms.md",
                 "skills/hexwiki/SKILL.md",
                 "skills/hexwiki/agents/openai.yaml",
                 "src/hexwiki/resources/guide.md",

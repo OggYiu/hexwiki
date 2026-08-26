@@ -65,6 +65,11 @@ jobs:
               ".claude-plugin/plugin.json",
           ):
               versions.add(json.loads((root / manifest).read_text(encoding="utf-8"))["version"])
+          marketplace = json.loads(
+              (root / ".claude-plugin/marketplace.json").read_text(encoding="utf-8")
+          )
+          versions.add(marketplace["version"])
+          versions.update(plugin["version"] for plugin in marketplace["plugins"])
           if versions != {expected}:
               raise SystemExit("Python and plugin versions are not synchronized")
           PY

@@ -5,6 +5,8 @@
   "author": {
     "name": "HexWiki contributors"
   },
+  "homepage": "https://github.com/OggYiu/hexwiki#readme",
+  "repository": "https://github.com/OggYiu/hexwiki",
   "license": "MIT",
   "keywords": [
     "pdf",
@@ -19,11 +21,19 @@
     "longDescription": "Operate the installed HexWiki CLI for explicit PDF extraction, scope locking, guarded generation, review, and verification.",
     "developerName": "HexWiki contributors",
     "category": "Productivity",
+    "websiteURL": "https://github.com/OggYiu/hexwiki",
+    "privacyPolicyURL": "https://github.com/OggYiu/hexwiki/blob/main/docs/security-and-data.md",
+    "termsOfServiceURL": "https://github.com/OggYiu/hexwiki/blob/main/docs/terms.md",
     "capabilities": [
       "Local CLI workflow"
     ],
+    "brandColor": "#0B2E63",
+    "composerIcon": "./assets/hexwiki-logo.png",
+    "logo": "./assets/hexwiki-logo.png",
     "defaultPrompt": [
-      "Use HexWiki to compile this bounded PDF scope into an auditable wiki."
+      "Compile this bounded PDF scope into an auditable HexWiki.",
+      "Check and lock my HexWiki profile, then run offline preflight.",
+      "Monitor this HexWiki run until its terminal result is available."
     ]
   }
 }
