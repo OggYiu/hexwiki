@@ -97,7 +97,6 @@ def test_release_version_and_limitations_are_synchronized() -> None:
     for manifest in (
         ROOT / ".codex-plugin" / "plugin.json",
         ROOT / ".claude-plugin" / "plugin.json",
-        ROOT / ".grok-plugin" / "plugin.json",
     ):
         versions.add(json.loads(manifest.read_text(encoding="utf-8"))["version"])
     assert versions == {"0.1.0"}

@@ -63,7 +63,6 @@ jobs:
           for manifest in (
               ".codex-plugin/plugin.json",
               ".claude-plugin/plugin.json",
-              ".grok-plugin/plugin.json",
           ):
               versions.add(json.loads((root / manifest).read_text(encoding="utf-8"))["version"])
           if versions != {expected}:

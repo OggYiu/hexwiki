@@ -3,8 +3,8 @@
 This alpha candidate provides one CLI for bounded PDF extraction, authored and
 locked scope profiles, guarded model-driven compilation, independent review,
 deterministic lint and integrity gates, local audit records, and offline wiki
-inspection. Portable Codex, Claude Code, and Grok Build skill manifests delegate
-to that same CLI.
+inspection. Portable Codex and Claude Code manifests delegate to that same CLI;
+Grok Build consumes the Claude-compatible plugin directly.
 
 Supported runtimes are Python 3.11 through 3.13 on Windows and Linux. Package
 tests cover Git-free source archives, clean wheel/source installs, bundled

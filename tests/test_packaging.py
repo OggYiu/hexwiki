@@ -123,7 +123,6 @@ class PackagingTests(unittest.TestCase):
             for required in (
                 ".claude-plugin/plugin.json",
                 ".codex-plugin/plugin.json",
-                ".grok-plugin/plugin.json",
                 "pyproject.toml",
                 "LICENSE",
                 "README.md",

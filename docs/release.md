@@ -54,6 +54,9 @@ claude plugin validate .
 grok plugin validate .
 ```
 
+Grok Build validates and loads the same `.claude-plugin/plugin.json`; its
+official compatibility layer does not require a separate Grok manifest.
+
 The current Codex CLI manages plugin marketplaces but does not expose a
 `plugin validate` subcommand; its plugin-creator package supplies the canonical
 manifest validator used above.

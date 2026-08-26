@@ -12,7 +12,6 @@ SKILL = ROOT / "skills" / "hexwiki" / "SKILL.md"
 MANIFESTS = (
     ROOT / ".codex-plugin" / "plugin.json",
     ROOT / ".claude-plugin" / "plugin.json",
-    ROOT / ".grok-plugin" / "plugin.json",
 )
 
 
@@ -69,6 +68,13 @@ def test_adapter_ui_metadata_is_generated_and_thin() -> None:
     assert 'short_description: "Build auditable source-bounded PDF wikis"' in metadata
     assert "$hexwiki" in metadata
     assert "dependencies:" not in metadata
+
+
+def test_grok_reuses_the_supported_claude_compatible_plugin() -> None:
+    docs = (ROOT / "docs" / "adapters.md").read_text(encoding="utf-8")
+    assert not (ROOT / ".grok-plugin").exists()
+    assert "Grok Build officially reads Claude Code plugins" in docs
+    assert "undocumented duplicate `.grok-plugin`" in docs
 
 
 def test_public_docs_do_not_overclaim_model_quality() -> None:
