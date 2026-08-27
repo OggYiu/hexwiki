@@ -29,7 +29,12 @@ from .profile import load_profile, load_profile_lock
 
 
 NOTES_PER_WRITE_STAGE = 2
-REVIEW_ROUNDS = 3
+# Review rounds are bounded, but three is not enough margin when a narrow
+# re-review discovers a fresh defect in a note that was just repaired.  The
+# fourth production pass observed in practice needed one more repair and one
+# final clean confirmation.  Later rounds remain cheap because they receive
+# only the notes named by the preceding findings.
+REVIEW_ROUNDS = 5
 LINT_ROUNDS = 6
 COMPLETENESS_ROUNDS = 3
 
@@ -964,9 +969,12 @@ def review_and_repair(
     seen_pages: set[int] = set()
     cited_pages: set[int] = set()
     seen_notes: set[str] = set()
+    pending_notes = {
+        path.relative_to(wiki_dir).as_posix()
+        for path in review.semantic_notes(wiki_dir)
+    }
     rounds: list[dict[str, Any]] = []
     report: dict[str, Any] = {}
-    global_coverage = "complete"
     for round_index in range(1, REVIEW_ROUNDS + 1):
         report = review.run_independent_review(
             wiki_dir=wiki_dir,
@@ -982,30 +990,36 @@ def review_and_repair(
             sleep=sleep,
         )
         seen_pages.update(report.get("pages_reviewed_this_round", []))
+        successful_notes: set[str] = set()
         for packet in report.get("packets", []):
             cited_pages.update(packet.get("pages_cited", []))
-            seen_notes.update(packet.get("notes", []))
-        if report.get("coverage") != "complete":
-            global_coverage = "partial"
+            if "error" not in packet:
+                successful_notes.update(packet.get("notes", []))
+        seen_notes.update(successful_notes)
+        pending_notes.difference_update(successful_notes)
         rounds.append(
             {
                 "round": str(round_index),
                 "scope": report.get("scope_of_round"),
                 "pages_reviewed": report.get("pages_reviewed_this_round", []),
-                "notes_reviewed": sum(
-                    len(packet.get("notes", [])) for packet in report.get("packets", [])
-                ),
+                "notes_reviewed": len(successful_notes),
                 "material_findings": report.get("material_findings"),
                 "execution_status": report.get("execution_status"),
+                "coverage": report.get("coverage"),
             }
         )
         report["pages_reviewed"] = sorted(seen_pages)
         report["pages_cited_but_never_supplied"] = sorted(cited_pages - seen_pages)
         report["notes_reviewed"] = sorted(seen_notes)
+        report["notes_pending_review"] = sorted(pending_notes)
         report["page_coverage"] = (
             "complete" if not (cited_pages - seen_pages) else "incomplete"
         )
-        report["coverage_across_rounds"] = global_coverage
+        report["coverage_across_rounds"] = (
+            "complete"
+            if not pending_notes and not (cited_pages - seen_pages)
+            else "partial"
+        )
         report["rounds"] = list(rounds)
         if report["finding_status"] == "clear" or round_index == REVIEW_ROUNDS:
             break
@@ -1033,6 +1047,10 @@ def review_and_repair(
                 tuple(names),
                 {"kind": "review-repair", "files": names, "findings": group},
             )
+        # A repaired path has a new version.  Its earlier review remains useful
+        # for cumulative page coverage, but the note is pending until a later
+        # round successfully inspects the changed artifact.
+        pending_notes.update(repaired)
         remaining_lint = repair_lint(executor, wiki_dir, date, writer)
         if remaining_lint:
             raise RuntimeError(
@@ -1190,6 +1208,16 @@ def compile_wiki(
             "semantic_notes": len(review.semantic_notes(wiki_dir)),
             "all_notes_are_unverified_drafts": True,
             "profile_id": profile["profile_id"],
+            "locked_scope": {
+                "profile_lock_verification": "passed",
+                "scope_declaration_matches_locked_evidence": True,
+                "scope_id": profile["scope_id"],
+                "scope_label": profile["scope_label"],
+                "primary_pages": list(profile["primary_pages"]),
+                "apparatus_pages": list(profile["apparatus_pages"]),
+                "source_pdf_sha256": profile["source_pdf_sha256"],
+                "canonical_scope_sha256": profile["canonical_scope_sha256"],
+            },
         }
         release_report = review.run_release_review(
             evidence=release_evidence,

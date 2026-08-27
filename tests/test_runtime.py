@@ -13,7 +13,7 @@ from typing import Any
 import pymupdf as fitz
 
 from hexwiki.engine import review, source
-from hexwiki.engine.agent import StageRequest, run_survey
+from hexwiki.engine.agent import REVIEW_ROUNDS, StageRequest, run_survey
 from hexwiki.engine.audit import atomic_text, exclusive_json, sha256_file
 from hexwiki.engine.config import RuntimeConfig, RuntimeLimits, TranscriptRecorder
 from hexwiki.engine.finalize import verify_checksums
@@ -816,6 +816,21 @@ class RuntimeIntegrationTests(unittest.TestCase):
             review_report["pages_reviewed"],
             review_report["pages_reviewed_this_round"],
         )
+        release_report = json.loads(
+            (output / "reports" / "release-review.json").read_text(encoding="utf-8")
+        )
+        locked_scope = release_report["evidence"]["locked_scope"]
+        lock = json.loads(self.lock_path.read_text(encoding="utf-8"))
+        self.assertEqual(locked_scope["profile_lock_verification"], "passed")
+        self.assertIs(locked_scope["scope_declaration_matches_locked_evidence"], True)
+        self.assertEqual(locked_scope["primary_pages"], [1, 2])
+        self.assertEqual(locked_scope["apparatus_pages"], [3])
+        self.assertEqual(
+            locked_scope["source_pdf_sha256"], lock["source"]["pdf_sha256"]
+        )
+        self.assertEqual(
+            locked_scope["canonical_scope_sha256"], lock["scope"]["canonical_sha256"]
+        )
         for path in review.semantic_notes(output):
             metadata, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
             self.assertNotIn("verified", metadata, path)
@@ -923,6 +938,12 @@ class RuntimeIntegrationTests(unittest.TestCase):
         retained = list(self.root.glob(".blocked-output.*.candidate"))
         self.assertEqual(len(retained), 1)
         self.assertTrue((retained[0] / "reports" / "independent-review.json").is_file())
+        retained_review = json.loads(
+            (retained[0] / "reports" / "independent-review.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(len(retained_review["rounds"]), REVIEW_ROUNDS)
 
         def write_variant(name: str, **changes: Any) -> Path:
             directory = self.root / name

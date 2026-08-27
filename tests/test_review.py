@@ -5,9 +5,10 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from hexwiki.engine import review
+from hexwiki.engine import agent, review
 from hexwiki.engine.audit import AuditLog, atomic_text
 
 
@@ -68,6 +69,23 @@ class FailingClient:
     def ask(self, *, system: str, user: str, label: str) -> dict[str, object]:
         self.calls += 1
         raise TimeoutError("synthetic reviewer timeout")
+
+
+class RepairExecutor:
+    def __init__(self, wiki_dir: Path) -> None:
+        self.wiki_dir = wiki_dir
+        self.requests: list[agent.StageRequest] = []
+
+    def execute(self, request: agent.StageRequest) -> str:
+        self.requests.append(request)
+        for relative in request.expected_paths:
+            path = self.wiki_dir / relative
+            atomic_text(
+                path,
+                path.read_text(encoding="utf-8").rstrip()
+                + f"\n\n<!-- {request.label} -->\n",
+            )
+        return f"completed {request.label}"
 
 
 class ReviewPacketTests(unittest.TestCase):
@@ -143,6 +161,91 @@ class ReviewPacketTests(unittest.TestCase):
             self.assertEqual(report["finding_status"], "findings")
             self.assertEqual(report["coverage"], "partial")
             self.assertIn("TimeoutError", report["packets"][0]["error"])
+
+    def test_cumulative_coverage_survives_narrow_rounds_until_fourth_round_clear(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            wiki = root / "wiki"
+            _write_note(wiki, "concepts/a.md", [1, 2])
+            _write_note(wiki, "concepts/b.md", [1, 2])
+            executor = RepairExecutor(wiki)
+
+            def scripted_review(**kwargs: object) -> dict[str, object]:
+                round_label = str(kwargs["round_label"])
+                finding = {
+                    "note": "concepts/a.md",
+                    "kind": "wrong-locator",
+                    "detail": "Synthetic finding for bounded round coverage.",
+                    "quote": "synthetic review target",
+                }
+                if round_label == "1":
+                    notes = ["concepts/a.md", "concepts/b.md"]
+                    supplied = [1, 2]
+                elif round_label == "2":
+                    notes = ["concepts/a.md"]
+                    supplied = [1]
+                elif round_label == "3":
+                    notes = ["concepts/a.md"]
+                    supplied = [2]
+                else:
+                    notes = ["concepts/a.md"]
+                    supplied = [1, 2]
+                findings = [] if round_label == "4" else [finding]
+                return {
+                    "round": round_label,
+                    "pages_reviewed_this_round": supplied,
+                    "pages_cited_but_never_supplied_this_round": sorted(
+                        {1, 2} - set(supplied)
+                    ),
+                    "execution_status": "passed",
+                    "finding_status": "clear" if not findings else "findings",
+                    "material_findings": len(findings),
+                    "packets": [
+                        {
+                            "notes": notes,
+                            "pages_supplied": supplied,
+                            "pages_cited": [1, 2],
+                            "findings": findings,
+                        }
+                    ],
+                    "coverage": "complete" if supplied == [1, 2] else "partial",
+                    "scope_of_round": (
+                        "all notes" if round_label == "1" else "repaired notes only"
+                    ),
+                }
+
+            runtime = SimpleNamespace(
+                limits=SimpleNamespace(review_attempts=1, review_retry_seconds=())
+            )
+            with (
+                patch.object(review, "load_pages_from_gateways", return_value={}),
+                patch.object(review, "run_independent_review", side_effect=scripted_review),
+                patch.object(agent, "repair_lint", return_value=[]),
+            ):
+                report = agent.review_and_repair(
+                    executor=executor,
+                    reviewer=object(),
+                    wiki_dir=wiki,
+                    profile={"primary_pages": [1, 2], "apparatus_pages": []},
+                    audit=AuditLog(root / "actions.jsonl", "cumulative-review-test"),
+                    runtime=runtime,
+                    date="2026-01-01",
+                    writer="test",
+                    smoke=False,
+                    sleep=lambda _: None,
+                )
+
+            self.assertEqual(len(report["rounds"]), 4)
+            self.assertEqual(report["finding_status"], "clear")
+            self.assertEqual(report["coverage_across_rounds"], "complete")
+            self.assertEqual(report["page_coverage"], "complete")
+            self.assertEqual(report["notes_pending_review"], [])
+            self.assertEqual(
+                [request.label for request in executor.requests],
+                ["review-repair:1.1", "review-repair:2.1", "review-repair:3.1"],
+            )
 
 
 if __name__ == "__main__":
