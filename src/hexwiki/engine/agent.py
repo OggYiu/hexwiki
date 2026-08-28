@@ -73,7 +73,9 @@ class SandboxPolicy:
     _LONG_UNC_PREFIX = "\\\\?\\UNC\\"
 
     def __init__(self, root: Path) -> None:
-        self.root = self._plain(Path(root).resolve(strict=False))
+        # Resolve the root the same way children are resolved, so the two
+        # cannot end up spelled differently for the containment comparison.
+        self.root = self._plain(Path(os.path.realpath(os.fspath(root))))
 
     @classmethod
     def _plain(cls, path: Path) -> Path:
@@ -99,10 +101,20 @@ class SandboxPolicy:
 
     @classmethod
     def _canonical(cls, path: Path) -> str:
-        value = os.path.normcase(os.path.abspath(os.fspath(path)))
+        # ``realpath``, not ``abspath``: the same directory can be spelled more
+        # than one way on Windows, and only real resolution collapses them. A
+        # hosted Windows runner sets TEMP to its 8.3 short form, so the root
+        # arrives with a truncated ``NAME~1`` component while a resolved child
+        # comes back with the long name. Compared as text those look unrelated,
+        # and containment then refuses a write that is plainly inside the
+        # candidate. ``realpath`` also collapses symlinks, so an escape through
+        # one is still caught.
+        value = os.path.normcase(os.path.realpath(os.fspath(path)))
         return value[4:] if value.startswith(cls._LONG_PATH_PREFIX) else value
 
-    def resolve(self, key: str) -> Path:
+    @staticmethod
+    def _key_parts(key: str) -> list[str]:
+        """Split a wiki-relative key, rejecting anything that could escape."""
         if not isinstance(key, str) or not key.strip() or "\x00" in key:
             raise SandboxViolation("file path must be a non-empty string")
         normalized = key.replace("\\", "/")
@@ -114,6 +126,10 @@ class SandboxPolicy:
             parts and parts[0].startswith("~")
         ):
             raise SandboxViolation("path traversal is not allowed")
+        return parts
+
+    def resolve(self, key: str) -> Path:
+        parts = self._key_parts(key)
         if not parts:
             # DeepAgents' virtual filesystem presents ``/`` as the backend root.
             # Map root-only spellings to the candidate instead of treating them
@@ -131,29 +147,23 @@ class SandboxPolicy:
         return candidate
 
     def relative(self, key: str) -> Path:
-        # Normalise here as well as in ``resolve``: this method does path
-        # arithmetic, so it must not trust the spelling it is handed.
-        path = self._plain(self.resolve(key))
-        try:
-            return path.relative_to(self.root)
-        except ValueError:
-            # ``resolve`` has already proved containment against the canonical
-            # forms, so reaching here means the two paths merely *spell* the same
-            # location differently. Recompute from the canonical comparison
-            # rather than letting a bare ValueError escape the sandbox: an
-            # unhandled one propagates out of the tool node and takes the whole
-            # compilation child with it.
-            root_text = os.fspath(self.root)
-            path_text = os.fspath(path)
-            root_name = os.path.normcase(root_text)
-            path_name = os.path.normcase(path_text)
-            if path_name == root_name:
-                return Path(".")
-            if not path_name.startswith(root_name + os.sep):
-                raise SandboxViolation("path is outside the candidate wiki") from None
-            # normcase only changes case, never length, so slicing the
-            # original-cased text by the root's length preserves real filenames.
-            return Path(path_text[len(root_text) + 1 :])
+        """The wiki-relative path for ``key``, once ``resolve`` proves containment.
+
+        Deliberately *not* computed by subtracting the root from the resolved
+        path. Two spellings of one location -- an extended-length ``\\\\?\\``
+        prefix, an 8.3 short name, a differing case, a symlink -- make that
+        subtraction raise ``ValueError`` on a path that is plainly inside the
+        candidate, and an unhandled one propagates out of the tool node and
+        takes the whole compilation child with it. It cost a 35-minute run
+        once and three Windows CI jobs afterwards.
+
+        So containment is proved by ``resolve`` against fully resolved forms,
+        and the relative path is rebuilt from the caller's own key. There is no
+        spelling left to disagree about.
+        """
+        self.resolve(key)
+        parts = self._key_parts(key)
+        return Path(*parts) if parts else Path(".")
 
     def is_immutable(self, key: str) -> bool:
         relative = self.relative(key)

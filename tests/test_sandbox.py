@@ -63,7 +63,39 @@ class ExtendedLengthPolicy(SandboxPolicy):
         return Path(self._LONG_PATH_PREFIX + os.fspath(resolved))
 
 
+class RespelledRootPolicy(SandboxPolicy):
+    """Reproduce a root and its children being spelled differently.
+
+    A hosted Windows runner sets TEMP to its 8.3 short form, so the sandbox root
+    arrives with a truncated ``NAME~1`` component while a resolved child comes
+    back with the long name. This forces the same divergence portably.
+    """
+
+    def resolve(self, key: str) -> Path:
+        resolved = super().resolve(key)
+        return Path(os.fspath(resolved).replace("candidate", "CANDID~1", 1))
+
+
 class SandboxTests(unittest.TestCase):
+    def test_relative_survives_a_root_spelled_differently_from_its_children(self) -> None:
+        """One location, two spellings, must not read as an escape.
+
+        ``relative`` is rebuilt from the caller's key rather than by subtracting
+        the root, so no spelling difference can make it raise.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "candidate"
+            (root / "concepts").mkdir(parents=True)
+            policy = RespelledRootPolicy(root)
+
+            self.assertEqual(
+                policy.relative("concepts/note.md"), Path("concepts") / "note.md"
+            )
+            self.assertFalse(policy.is_immutable("concepts/note.md"))
+            self.assertTrue(policy.is_immutable("sources/page.md"))
+            self.assertTrue(policy.is_immutable("WIKI_GUIDE.md"))
+            self.assertEqual(policy.relative("/"), Path("."))
+
     def test_plain_strips_only_the_extended_length_prefix(self) -> None:
         stripped = {
             "\\\\?\\C:\\wiki\\notes\\item.md": "C:\\wiki\\notes\\item.md",
