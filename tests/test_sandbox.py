@@ -171,10 +171,14 @@ class SandboxTests(unittest.TestCase):
             root = Path(temporary) / "candidate"
             root.mkdir()
             policy = SandboxPolicy(root)
+            # Resolve independently of the policy: a temp directory can have a
+            # second spelling (an 8.3 short name, a symlink), and asserting the
+            # raw one makes this test fail on machines where it does.
+            resolved = Path(os.path.realpath(root))
 
-            self.assertEqual(policy.resolve("/"), root.resolve())
-            self.assertEqual(policy.resolve("."), root.resolve())
-            self.assertEqual(policy.resolve("/notes/item.md"), root / "notes" / "item.md")
+            self.assertEqual(policy.resolve("/"), resolved)
+            self.assertEqual(policy.resolve("."), resolved)
+            self.assertEqual(policy.resolve("/notes/item.md"), resolved / "notes" / "item.md")
             with self.assertRaises(SandboxViolation):
                 policy.resolve("/../outside/escaped.md")
 

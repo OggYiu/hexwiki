@@ -199,7 +199,27 @@ KNOWN_CREDENTIAL = re.compile(
     r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
     r")"
 )
-SAFE_EMAIL_DOMAINS = (".example", ".invalid", "example.com", "example.org", "example.net")
+# Domains that cannot carry mail to a person. The reserved TLDs come from
+# RFC 2606; `users.noreply.github.com` is GitHub's non-routable address space,
+# which exists for exactly the reason this check does -- so a contributor's real
+# address is never published.
+SAFE_EMAIL_DOMAINS = (
+    ".example",
+    ".invalid",
+    "example.com",
+    "example.org",
+    "example.net",
+    "users.noreply.github.com",
+)
+
+# Exact addresses, not domains. GitHub stamps machine-generated commits with its
+# own identity -- Dependabot's commits are committed by `GitHub
+# <noreply@github.com>` and its message boilerplate names the public support
+# address -- so a dependency PR would otherwise fail this scan while leaking
+# nothing about anybody. These are listed one address at a time on purpose:
+# allowing the whole `github.com` domain would also admit a real personal
+# mailbox there, which is precisely what this check exists to catch.
+SAFE_EMAIL_ADDRESSES = frozenset({"noreply@github.com", "support@github.com"})
 
 
 def normalized_tokens(value: str) -> list[str]:
@@ -231,7 +251,10 @@ def privacy_findings(text: str) -> list[str]:
     if SECRET_SHAPE.search(text) or KNOWN_CREDENTIAL.search(text):
         findings.append("credential-shaped value")
     for match in EMAIL_ADDRESS.finditer(text):
-        domain = match.group(0).rsplit("@", 1)[1].lower()
+        address = match.group(0).lower()
+        domain = address.rsplit("@", 1)[1]
+        if address in SAFE_EMAIL_ADDRESSES:
+            continue
         if not domain.endswith(SAFE_EMAIL_DOMAINS):
             findings.append("non-placeholder email address")
             break

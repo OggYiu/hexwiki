@@ -247,18 +247,29 @@ def _guarded_backend(wiki_dir: Path, recorder: TranscriptRecorder) -> tuple[Any,
                     responses.extend(super().upload_files([(file_path, content)]))
             return responses
 
-    backend = GuardedBackend(root_dir=wiki_dir, virtual_mode=True)
+    # Hand the backend the *resolved* root. It does its own path arithmetic
+    # against this value, so if it keeps an unresolved spelling while
+    # ``_resolve_path`` returns a resolved one, the two disagree on a machine
+    # where the same directory has two names -- an 8.3 short form, a symlinked
+    # temp directory -- and a legitimate write raises ValueError from inside
+    # deepagents, where this module cannot catch it.
+    backend = GuardedBackend(root_dir=policy.root, virtual_mode=True)
 
     @tool("delete_file", parse_docstring=False)
     def delete_file(file_path: str) -> str:
         """Delete one mutable model-written file by its wiki-relative path."""
         try:
-            removed = policy.delete_file(file_path)
+            policy.delete_file(file_path)
+            # Ask the policy for the relative path rather than subtracting the
+            # raw ``wiki_dir`` from the resolved one: those are two spellings of
+            # the same directory on a machine with 8.3 short names, and the
+            # subtraction raises ValueError out of the tool.
+            recorded = policy.relative(file_path).as_posix()
         except (SandboxViolation, FileNotFoundError) as error:
             return f"Refused: {error}"
         recorder.append(
             "tool-events",
-            {"event": "guarded-delete", "path": removed.relative_to(wiki_dir).as_posix()},
+            {"event": "guarded-delete", "path": recorded},
         )
         return f"Deleted {file_path}"
 
