@@ -42,59 +42,69 @@ class PlanError(ValueError):
 
 OUTLINE_SCHEMA = """{
   "chapter": {
-    "number": <positive int>,
+    "number": <int>,
     "slug": "<nn>-<kebab-title>",
-    "title": "<the scoped division's title>",
-    "organizing_question": "<one sentence>",
-    "argument_steps": ["<ordered inference step>", ...],
-    "establishes": ["<supported result>", ...],
-    "leaves_open": ["<unresolved question>", ...]
+    "title": "<the division's own title, as printed>",
+    "organizing_question": "<the question this division sets itself, one sentence>",
+    "argument_steps": ["<ordered inference steps, 4-8 of them, one short sentence each>"],
+    "establishes": ["<what the division actually supports, short phrases>"],
+    "leaves_open": ["<what it explicitly does not settle, short phrases>"]
   },
-  "sections": [{
-    "order": <positive int>,
-    "slug": "<nn>-<kebab-title>",
-    "title": "<source title or faithful descriptive title>",
-    "pdf_pages": [<int>, ...],
-    "summary": "<what this section does in the argument>"
-  }, ...]
+  "sections": [
+    {
+      "order": <int, 1-based, in the source's own order>,
+      "slug": "<nn>-<kebab-title>",
+      "title": "<section title or a faithful descriptive title>",
+      "pdf_pages": [<int>, ...],
+      "summary": "<1-2 sentences: what this section does in the argument>"
+    }
+  ]
 }"""
 
 CONCEPTS_SCHEMA = """{
-  "concepts": [{
-    "slug": "<kebab-slug>",
-    "title": "<short noun phrase>",
-    "kind": "substantive|methodological|epistemic",
-    "pdf_pages": [<int>, ...],
-    "summary": "<what the idea is and what work it does>"
-  }, ...]
+  "concepts": [
+    {
+      "slug": "<kebab-slug>",
+      "title": "<short noun phrase naming the idea>",
+      "kind": "substantive|methodological|epistemic",
+      "pdf_pages": [<int>, ...],
+      "summary": "<1-2 sentences: what the idea is and what work it does>"
+    }
+  ]
 }"""
 
 ROSTER_SCHEMA = """{
-  "people": [{
-    "name": "<name exactly as the source gives it>",
-    "group": "author|<kebab role group>",
-    "pdf_pages": [<int>, ...],
-    "role": "<role in this scope>",
-    "caution": "<source-reading caution>"
-  }, ...],
-  "claims": [{
-    "claim": "<substantive claim>",
-    "owner": "<who makes it>",
-    "evidence": "<in-scope evidence>",
-    "limit": "<evidential limit>"
-  }, ...],
-  "motifs": ["<feature recurring across episodes>", ...]
+  "people": [
+    {
+      "name": "<name exactly as the source gives it>",
+      "group": "author|<kebab-slug of a role group you define>",
+      "pdf_pages": [<int>, ...],
+      "role": "<what they do in this material, one clause>",
+      "caution": "<what a reader should be careful about with them, one clause>"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "<a substantive claim the division makes, one sentence>",
+      "owner": "<who makes it: the author, a named witness, a cited work>",
+      "evidence": "<the in-scope evidence offered for it, one clause>",
+      "limit": "<the evidential limit on that evidence, one clause>"
+    }
+  ],
+  "motifs": ["<recurring feature that shows up across several episodes>"]
 }"""
 
 EPISODES_SCHEMA = """{
-  "episodes": [{
-    "slug": "<kebab-slug>",
-    "title": "<short descriptive title>",
-    "pdf_pages": [<int>, ...],
-    "summary": "<what is narrated>",
-    "support": "<support present and absent>",
-    "section_order": <positive int>
-  }, ...]
+  "episodes": [
+    {
+      "slug": "<kebab-slug, distinctive: name it after the thing itself>",
+      "title": "<short descriptive title, include a year or place when given>",
+      "pdf_pages": [<int>, ...],
+      "summary": "<1-3 sentences of what is narrated: names, dates, places, numbers>",
+      "support": "<one sentence: what in-scope support exists, and what does not>",
+      "section_order": <int, the section that narrates it>
+    }
+  ]
 }"""
 
 
