@@ -69,13 +69,38 @@ class SandboxPolicy:
 
     IMMUTABLE_ROOTS = {"_ingest", "sources", "reference"}
 
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root).resolve(strict=False)
+    _LONG_PATH_PREFIX = "\\\\?\\"
+    _LONG_UNC_PREFIX = "\\\\?\\UNC\\"
 
-    @staticmethod
-    def _canonical(path: Path) -> str:
+    def __init__(self, root: Path) -> None:
+        self.root = self._plain(Path(root).resolve(strict=False))
+
+    @classmethod
+    def _plain(cls, path: Path) -> Path:
+        """Drop Windows' extended-length prefix without otherwise changing the path.
+
+        ``Path.resolve`` may hand back a ``\\\\?\\``-prefixed path, and whether it
+        does is not stable between two calls on sibling paths. An unprefixed root
+        and a prefixed child then compare as unrelated even though one plainly
+        contains the other, so ``relative_to`` raises ``ValueError`` immediately
+        after containment has just proved the opposite.
+
+        Containment already normalised the prefix away for its own comparison in
+        ``_canonical``. The path that is *returned* has to carry the same
+        normalisation, or every caller doing arithmetic on it inherits the bug --
+        which is exactly how one note write killed a 35-minute run.
+        """
+        value = os.fspath(path)
+        if value.startswith(cls._LONG_UNC_PREFIX):
+            return Path("\\\\" + value[len(cls._LONG_UNC_PREFIX) :])
+        if value.startswith(cls._LONG_PATH_PREFIX):
+            return Path(value[len(cls._LONG_PATH_PREFIX) :])
+        return path
+
+    @classmethod
+    def _canonical(cls, path: Path) -> str:
         value = os.path.normcase(os.path.abspath(os.fspath(path)))
-        return value[4:] if value.startswith("\\\\?\\") else value
+        return value[4:] if value.startswith(cls._LONG_PATH_PREFIX) else value
 
     def resolve(self, key: str) -> Path:
         if not isinstance(key, str) or not key.strip() or "\x00" in key:
@@ -94,7 +119,7 @@ class SandboxPolicy:
             # Map root-only spellings to the candidate instead of treating them
             # as host-absolute paths; resolved containment still guards children.
             return self.root
-        candidate = self.root.joinpath(*parts).resolve(strict=False)
+        candidate = self._plain(self.root.joinpath(*parts).resolve(strict=False))
         root_name = self._canonical(self.root)
         candidate_name = self._canonical(candidate)
         try:
@@ -106,7 +131,29 @@ class SandboxPolicy:
         return candidate
 
     def relative(self, key: str) -> Path:
-        return self.resolve(key).relative_to(self.root)
+        # Normalise here as well as in ``resolve``: this method does path
+        # arithmetic, so it must not trust the spelling it is handed.
+        path = self._plain(self.resolve(key))
+        try:
+            return path.relative_to(self.root)
+        except ValueError:
+            # ``resolve`` has already proved containment against the canonical
+            # forms, so reaching here means the two paths merely *spell* the same
+            # location differently. Recompute from the canonical comparison
+            # rather than letting a bare ValueError escape the sandbox: an
+            # unhandled one propagates out of the tool node and takes the whole
+            # compilation child with it.
+            root_text = os.fspath(self.root)
+            path_text = os.fspath(path)
+            root_name = os.path.normcase(root_text)
+            path_name = os.path.normcase(path_text)
+            if path_name == root_name:
+                return Path(".")
+            if not path_name.startswith(root_name + os.sep):
+                raise SandboxViolation("path is outside the candidate wiki") from None
+            # normcase only changes case, never length, so slicing the
+            # original-cased text by the root's length preserves real filenames.
+            return Path(path_text[len(root_text) + 1 :])
 
     def is_immutable(self, key: str) -> bool:
         relative = self.relative(key)
@@ -146,7 +193,14 @@ def _guarded_backend(wiki_dir: Path, recorder: TranscriptRecorder) -> tuple[Any,
             return policy.resolve(key)
 
         def write(self, file_path: str, content: str) -> Any:
-            if policy.is_immutable(file_path):
+            # A refused path is a defect on one write, never a reason to lose the
+            # whole compilation: report it the same way an immutable target is
+            # reported, so the model can correct the path and continue.
+            try:
+                immutable = policy.is_immutable(file_path)
+            except SandboxViolation as error:
+                return WriteResult(error=f"Refused: {error}")
+            if immutable:
                 return WriteResult(error=f"Immutable current-run evidence: {file_path}")
             return super().write(file_path, content)
 
@@ -157,14 +211,25 @@ def _guarded_backend(wiki_dir: Path, recorder: TranscriptRecorder) -> tuple[Any,
             new_string: str,
             replace_all: bool = False,
         ) -> Any:
-            if policy.is_immutable(file_path):
+            try:
+                immutable = policy.is_immutable(file_path)
+            except SandboxViolation as error:
+                return EditResult(error=f"Refused: {error}")
+            if immutable:
                 return EditResult(error=f"Immutable current-run evidence: {file_path}")
             return super().edit(file_path, old_string, new_string, replace_all)
 
         def upload_files(self, files: list[tuple[str, bytes]]) -> list[Any]:
             responses: list[Any] = []
             for file_path, content in files:
-                if policy.is_immutable(file_path):
+                try:
+                    immutable = policy.is_immutable(file_path)
+                except SandboxViolation:
+                    responses.append(
+                        FileUploadResponse(path=file_path, error="refused_path")
+                    )
+                    continue
+                if immutable:
                     responses.append(
                         FileUploadResponse(path=file_path, error="immutable_current_run_evidence")
                     )
