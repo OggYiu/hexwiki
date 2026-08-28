@@ -39,7 +39,7 @@ model = [
     "PyYAML==6.0.3",
 ]
 observability = [
-    "langfuse==4.14.1",
+    "langfuse==4.14.5",
 ]
 dev = [
     "build>=1.2",
