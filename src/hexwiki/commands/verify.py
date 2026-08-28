@@ -32,8 +32,18 @@ def run(args: argparse.Namespace) -> int:
         len(quotations["in_scope_but_not_on_a_cited_page"])
         + len(quotations["not_found_in_scope"])
     )
+    # A check that examined nothing has not passed. Zero issues out of zero
+    # quotations is exactly what a wiki whose quotation style this tool cannot
+    # read looks like, and reporting that as `passed` hands back a clean bill of
+    # health for a bundle nothing verified. Say so instead.
+    if quotations["semantic_notes"] and not quotations["quotations_checked"]:
+        status = "inconclusive"
+    elif quote_issues:
+        status = "failed"
+    else:
+        status = "passed"
     report = {
-        "status": "passed" if quote_issues == 0 else "failed",
+        "status": status,
         "wiki": str(wiki),
         "checksummed_files": len(checksums),
         "quotations": quotations,

@@ -20,6 +20,7 @@ from hexwiki.engine.finalize import (
 )
 from hexwiki.engine.profile import REQUIRED_NOTE_TYPES, load_profile, load_profile_lock
 from hexwiki.extraction.pdf import ExtractionOptions, extract
+from hexwiki.tools.quotes import quotations, straight_quoted
 from hexwiki.tools.quotes import verify as verify_quotes
 from hexwiki.tools.wiki import query_vault
 
@@ -247,6 +248,45 @@ class OfflinePipelineTests(unittest.TestCase):
             published = publish_candidate(candidate, root / "published-wiki")
             self.assertFalse(candidate.exists())
             self.assertGreater(len(verify_checksums(published)), 10)
+
+
+class QuotationDetectionTests(unittest.TestCase):
+    def test_straight_quotes_pair_in_order_and_skip_the_prose_between_them(self) -> None:
+        """The trap: a closing mark paired with the next opening mark.
+
+        Straight quotes are their own closing mark, so a non-greedy `"(.+?)"`
+        matches the *gap* between two quotations as if it were a third. That
+        mistake once reported a support rate of 8.8% for a wiki that scores
+        96.12, so it is pinned here.
+        """
+        line = (
+            'The chapter reports "a luminous object rose above the treeline that '
+            'evening" and, some pages later, that witnesses described '
+            '"a soft whirring sound that faded toward the north".'
+        )
+        found = straight_quoted(line, 40)
+
+        self.assertEqual(len(found), 2)
+        self.assertTrue(found[0].startswith("a luminous object rose"))
+        self.assertTrue(found[1].startswith("a soft whirring sound"))
+        for span in found:
+            self.assertNotIn("some pages later", span)
+
+    def test_quotations_reads_straight_and_typographic_alike(self) -> None:
+        """A wiki that quotes plainly must not be checked against nothing."""
+        body = (
+            "---\ntype: Case Dossier\ntitle: \"A title that is quite long indeed\"\n---\n\n"
+            "# Note\n\n## Reported account\n\n"
+            'The source states "the assembled crowd held four persons in bonds that day".\n'
+            "It also records “ships that sail in the clouds above the ruined fields”.\n"
+        )
+        found = quotations(body, 40)
+
+        self.assertEqual(len(found), 2)
+        self.assertTrue(any(item.startswith("the assembled crowd") for item in found))
+        self.assertTrue(any(item.startswith("ships that sail") for item in found))
+        # The front-matter title is quoted too, and must not be counted.
+        self.assertFalse(any("quite long indeed" in item for item in found))
 
 
 if __name__ == "__main__":

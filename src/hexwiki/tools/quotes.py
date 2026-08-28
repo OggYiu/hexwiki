@@ -165,11 +165,39 @@ def strip_constructed_sections(body: str) -> str:
     return "\n".join(out)
 
 
+def straight_quoted(body: str, minimum: int) -> list[str]:
+    """Quotations written with straight quotes rather than typographic ones.
+
+    A straight quote is its own closing mark, so the delimiters cannot be told
+    apart and a naive ``"(.+?)"`` pairs the *closing* mark of one quotation with
+    the *opening* mark of the next -- capturing the note's own prose in between
+    and reporting it as an unsupported quotation. That mistake once reported a
+    support rate of 8.8% for a wiki that scores 96.12, so it is not repeated
+    here: marks are paired in order within a single line, first with second and
+    third with fourth, which is how balanced prose is actually written.
+
+    Ignoring straight quotes entirely is not an option either. A wiki that
+    quotes its source accurately but typographically plainly would be checked
+    against nothing at all, and would then be reported as clean.
+    """
+    found: list[str] = []
+    for line in body.splitlines():
+        if line.lstrip().startswith(("```", "    ")):
+            continue
+        marks = [match.start() for match in re.finditer(r'"', line)]
+        for opening, closing in zip(marks[0::2], marks[1::2]):
+            span = line[opening + 1 : closing]
+            if len(span) >= minimum and "“" not in span and "”" not in span:
+                found.append(span)
+    return found
+
+
 def quotations(text: str, minimum: int) -> list[str]:
     body = re.sub(r"(?ms)^---.*?^---\s*", "", text, count=1)   # drop front matter
     body = re.sub(r"(?m)^\s*\|.*\|\s*$", "", body)             # drop tables
     body = strip_constructed_sections(body)
     found = re.compile(QUOTE_RE.pattern % minimum, re.S).findall(body)
+    found += straight_quoted(body, minimum)
     out, seen = [], set()
     for item in found:
         item = item.strip()
