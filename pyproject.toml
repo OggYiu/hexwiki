@@ -34,7 +34,7 @@ Issues = "https://github.com/OggYiu/hexwiki/issues"
 [project.optional-dependencies]
 model = [
     "deepagents==0.6.12",
-    "langchain-openai==1.4.1",
+    "langchain-openai==1.6.0",
     "openai==2.49.0",
     "PyYAML==6.0.3",
 ]
