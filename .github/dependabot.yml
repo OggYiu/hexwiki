@@ -12,3 +12,24 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # The model and observability extras are pinned to exact versions on
+    # purpose. A smoke report binds the exact dependency versions it ran
+    # against, and a build refuses a smoke whose binding no longer matches, so
+    # changing any of these invalidates the proven runtime and requires a fresh
+    # smoke and production build to re-establish it. An automated version bump
+    # therefore cannot be merged on its own evidence, and left enabled it just
+    # reopens a red pull request every month.
+    #
+    # This suppresses routine version updates only. Security advisories still
+    # surface through Dependabot alerts, and should be handled deliberately --
+    # bump the pin, then re-run the smoke and build before release.
+    #
+    # Everything else here uses version ranges (Pillow, PyMuPDF, and the dev
+    # tools), so it continues to receive update pull requests that CI can
+    # validate on its own.
+    ignore:
+      - dependency-name: deepagents
+      - dependency-name: langchain-openai
+      - dependency-name: openai
+      - dependency-name: PyYAML
+      - dependency-name: langfuse
