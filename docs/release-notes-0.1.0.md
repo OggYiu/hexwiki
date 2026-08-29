@@ -27,6 +27,48 @@ Important limitations:
 - The package contains no source corpus, generated evidence, private endpoint,
   credential, or benchmark result.
 
+## One measured benchmark result
+
+One end-to-end run was measured against a frozen, privately held reference
+bundle. The numbers below are that single run and nothing more.
+
+| | |
+|---|---|
+| Package | `hexwiki` 0.1.0, runtime commit `87e12e4` |
+| Route | operator-managed OpenAI-compatible endpoint, model `grok-aiprogramming` |
+| Date | 2026-08-29 |
+| Source scope | one chapter of one book, 25 PDF pages, 18 apparatus entries |
+| Score | **86.41 / 100** |
+| Threshold | `> 95.00` — **not met; the candidate was not accepted** |
+| Hard gates | **14 / 14 passed** |
+
+By component: semantic alignment 28.05/40, structure and retrieval 18.36/20,
+source fidelity and provenance 20/20, epistemic discipline 15/15, integrity and
+reproducibility 5/5.
+
+Coverage of the 43 reference units: 18 covered, 25 partial, **0 missing**.
+Retrieval 10/12. The build made 615 model calls with zero provider errors across
+64 stages, and independent review closed with zero material findings and
+complete page coverage. Quotation verification checked 362 substantive
+quotations and found 91.16% supported by a page the note itself cites, with two
+quotations attributable to a page the note did not cite.
+
+What the shortfall is, and is not. No reference unit is missing, and the
+deterministic half of the benchmark is perfect. The gap is concentrated in
+partial semantic alignment, and the recorded reasons are dominated by editorial
+divergence rather than absent or wrong content: the run's motif matrix covers 32
+episodes where the reference selects 12, its argument map orders the chapter's
+inference differently from the reference's distinctions, and its rosters carry
+different caution columns. Closing those would mean writing one reference
+wiki's particular selections into the compiler's prompts, which would improve
+this score without improving the product.
+
+Read this as one measurement of one chapter of one book on one route, not as a
+general quality claim. The reference bundle is not a blinded control, and the
+comparator's semantic half uses a model to judge; its deterministic half uses
+none. A different source, scope, or route needs its own preflight, smoke, and
+measurement.
+
 This file describes a candidate, not a completed publication. A tag, hosted
 release, marketplace submission, and PyPI upload remain explicit operator
 actions under the release procedure.
