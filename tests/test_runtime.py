@@ -13,7 +13,17 @@ from typing import Any
 import pymupdf as fitz
 
 from hexwiki.engine import review, source
-from hexwiki.engine.agent import REVIEW_ROUNDS, StageRequest, run_survey
+from hexwiki.engine.agent import (
+    REVIEW_ROUNDS,
+    StageRequest,
+    run_survey,
+    stage_cases,
+    stage_concepts,
+    stage_navigation,
+    stage_people,
+    stage_structure,
+    stage_synthesis,
+)
 from hexwiki.engine.audit import atomic_text, exclusive_json, sha256_file
 from hexwiki.engine.config import RuntimeConfig, RuntimeLimits, TranscriptRecorder
 from hexwiki.engine.finalize import verify_checksums
@@ -273,7 +283,7 @@ class FakeStageExecutor:
             "---",
             f"type: {note_type}",
             f"title: {json.dumps(title)}",
-            "description: \"A bounded synthetic source note used to test the complete guarded runtime.\"",
+            'description: "A bounded synthetic source note used to test the complete guarded runtime."',
             f"tags: [synthetic, {Path(relative).parts[0] if len(Path(relative).parts) > 1 else 'root'}]",
             "semantic_note: true",
             "status: draft",
@@ -421,7 +431,11 @@ class FakeStageExecutor:
         self.executed_labels.append(request.label)
         self.recorder.append(
             "stage-events",
-            {"event": "stage-started", "stage": request.label, "payload": request.payload},
+            {
+                "event": "stage-started",
+                "stage": request.label,
+                "payload": request.payload,
+            },
         )
         kind = request.payload.get("kind")
         inventory = _inventory()
@@ -445,7 +459,9 @@ class FakeStageExecutor:
         elif kind == "episode-audit":
             pass
         elif kind in {"chapter", "section", "author"}:
-            self._write_from_item(request.expected_paths[0], request.payload["item"], kind)
+            self._write_from_item(
+                request.expected_paths[0], request.payload["item"], kind
+            )
         elif kind in {"cases", "concepts"}:
             for relative, item in zip(request.expected_paths, request.payload["items"]):
                 if kind == "concepts" and not self.skipped_concept:
@@ -454,7 +470,11 @@ class FakeStageExecutor:
                 self._write_from_item(relative, item, kind)
         elif kind == "people-roster":
             pages = sorted(
-                {page for item in request.payload["items"] for page in item["pdf_pages"]}
+                {
+                    page
+                    for item in request.payload["items"]
+                    for page in item["pdf_pages"]
+                }
             )
             self._write_note(
                 request.expected_paths[0],
@@ -488,7 +508,14 @@ class FakeStageExecutor:
                     self._write_from_item(relative, matched, "concepts")
                 else:
                     self._write_note(relative)
-            for folder in ("chapters", "sections", "cases", "concepts", "people", "synthesis"):
+            for folder in (
+                "chapters",
+                "sections",
+                "cases",
+                "concepts",
+                "people",
+                "synthesis",
+            ):
                 self._write_folder_index(folder)
             self._write_root_index()
         elif kind == "crosslink":
@@ -539,13 +566,13 @@ class FakeReviewer:
             return {
                 "status": "blocked" if self.persistent_findings else "clear",
                 "rationale": "Synthetic release evidence was evaluated by the fake reviewer.",
-                "concerns": ["synthetic persistent finding"] if self.persistent_findings else [],
+                "concerns": ["synthetic persistent finding"]
+                if self.persistent_findings
+                else [],
             }
         paths = re.findall(r"--- ([^\s]+\.md) \(cites", user)
         mutable = [
-            path
-            for path in paths
-            if not path.startswith(("sources/", "reference/"))
+            path for path in paths if not path.startswith(("sources/", "reference/"))
         ]
         if mutable and (self.persistent_findings or not self.finding_sent):
             self.finding_sent = True
@@ -597,7 +624,9 @@ class SurveyCorrectionTests(unittest.TestCase):
                         part = request.payload["part"]
                         if existed:
                             if not request.allow_unchanged:
-                                raise AssertionError("correction must permit a valid no-op")
+                                raise AssertionError(
+                                    "correction must permit a valid no-op"
+                                )
                             if part == 1:
                                 return "kept the valid first episode file"
                             value = {"episodes": []}
@@ -640,6 +669,106 @@ class SurveyCorrectionTests(unittest.TestCase):
             ]
             self.assertEqual(len(corrected), 2)
             self.assertTrue(all(request.allow_unchanged for request in corrected))
+
+            first_by_label = {}
+            for request in requests:
+                first_by_label.setdefault(request.label, request.prompt)
+            self.assertIn(
+                "a functional unit omitted here cannot be recovered",
+                first_by_label["survey:outline"],
+            )
+            self.assertIn(
+                "an all-substantive list has catalogued subject matter",
+                first_by_label["survey:concepts"],
+            )
+            self.assertIn(
+                "in-scope source status or interpretive risk",
+                first_by_label["survey:roster"],
+            )
+            self.assertIn(
+                "one compilation entry for the set in addition",
+                first_by_label["survey:episodes-1"],
+            )
+            self.assertIn(
+                "looking specifically for what a first reading skips",
+                first_by_label["survey-audit:1"],
+            )
+
+
+class PromptContractTests(unittest.TestCase):
+    def test_writing_prompts_preserve_the_full_source_bounded_contract(self) -> None:
+        requests: list[StageRequest] = []
+
+        class CaptureExecutor:
+            def execute(self, request: StageRequest) -> str:
+                requests.append(request)
+                return "captured"
+
+        inventory = json.loads(json.dumps(_inventory()))
+        inventory["people"].append(
+            {
+                "name": "Example Observer",
+                "group": "observers",
+                "pdf_pages": [1],
+                "role": "reports the bounded example",
+                "caution": "the scope supplies one report and no independent record",
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            profile_path = Path(temporary) / "profile.json"
+            atomic_text(profile_path, json.dumps(_profile(), indent=2) + "\n")
+            profile = load_profile(profile_path).runtime()
+
+            executor = CaptureExecutor()
+            stage_structure(executor, inventory, "2026-01-01", "test-writer")
+            stage_cases(executor, inventory, "2026-01-01", "test-writer")
+            stage_concepts(executor, inventory, "2026-01-01", "test-writer")
+            stage_people(
+                executor,
+                inventory,
+                profile,
+                "2026-01-01",
+                "test-writer",
+            )
+            stage_synthesis(executor, inventory, "2026-01-01", "test-writer")
+            stage_navigation(executor, inventory, "2026-01-01", "test-writer")
+
+        prompts = {request.label: request.prompt for request in requests}
+        self.assertIn(
+            "surveyed argument steps", prompts["structure:chapter"].casefold()
+        )
+        self.assertIn(
+            "preserve its named examples and methodological cautions",
+            prompts["structure:section-01"],
+        )
+        self.assertIn(
+            "The survey identifies the episode; the page supplies the account.",
+            prompts["cases:1"],
+        )
+        self.assertIn("one focused grep over `cases/`", prompts["concepts:1"])
+        self.assertIn("one canonical home", prompts["concepts:1"])
+        self.assertIn("never a biography", prompts["people:author"])
+        self.assertIn(
+            "preserve and expand each surveyed caution",
+            prompts["people:observers"],
+        )
+        self.assertIn(
+            "do not replace the source's sequence with a smoother thesis",
+            prompts["synthesis:argument-map"],
+        )
+        self.assertIn(
+            "one linked Case Dossier per row",
+            prompts["synthesis:motif-matrix"],
+        )
+        self.assertIn(
+            "reported accounts are not verified events",
+            prompts["navigation:overview"],
+        )
+        self.assertIn(
+            "a recurrence route through `synthesis/motif-matrix.md`",
+            prompts["navigation:reading-guide"],
+        )
 
 
 def _runtime(root: Path) -> RuntimeConfig:
@@ -861,7 +990,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
         terminal = json.loads(
             (preflight_dir / "terminal.json").read_text(encoding="utf-8")
         )
-        self.assertEqual((terminal["category"], terminal["exit_code"]), ("preflight", 3))
+        self.assertEqual(
+            (terminal["category"], terminal["exit_code"]), ("preflight", 3)
+        )
 
         runtime_dir = self.root / "runtime-failure"
         with self.assertRaises(WorkflowFailure):
@@ -872,7 +1003,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 runtime=self.runtime,
                 services=_services(fail_runtime=True),
             )
-        terminal = json.loads((runtime_dir / "terminal.json").read_text(encoding="utf-8"))
+        terminal = json.loads(
+            (runtime_dir / "terminal.json").read_text(encoding="utf-8")
+        )
         self.assertEqual((terminal["category"], terminal["exit_code"]), ("runtime", 4))
 
         valid_smoke = run_smoke(
@@ -889,8 +1022,12 @@ class RuntimeIntegrationTests(unittest.TestCase):
         corrected = report_dir / "smoke-report.json"
         atomic_text(corrected, json.dumps(report, indent=2, sort_keys=True) + "\n")
         digest = sha256_file(corrected)
-        atomic_text(report_dir / "smoke-report.sha256", f"{digest}  smoke-report.json\n")
-        run_record = json.loads((valid_smoke.parent / "run.json").read_text(encoding="utf-8"))
+        atomic_text(
+            report_dir / "smoke-report.sha256", f"{digest}  smoke-report.json\n"
+        )
+        run_record = json.loads(
+            (valid_smoke.parent / "run.json").read_text(encoding="utf-8")
+        )
         atomic_text(report_dir / "run.json", json.dumps(run_record) + "\n")
         atomic_text(
             report_dir / "terminal.json",
@@ -914,7 +1051,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 runtime=self.runtime,
                 services=_services(),
             )
-        terminal = json.loads((config_dir / "terminal.json").read_text(encoding="utf-8"))
+        terminal = json.loads(
+            (config_dir / "terminal.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(
             (terminal["category"], terminal["exit_code"]), ("configuration", 2)
         )
@@ -933,7 +1072,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
         terminal = json.loads(
             (validation_dir / "terminal.json").read_text(encoding="utf-8")
         )
-        self.assertEqual((terminal["category"], terminal["exit_code"]), ("validation", 5))
+        self.assertEqual(
+            (terminal["category"], terminal["exit_code"]), ("validation", 5)
+        )
         self.assertFalse((self.root / "blocked-output").exists())
         retained = list(self.root.glob(".blocked-output.*.candidate"))
         self.assertEqual(len(retained), 1)
@@ -977,7 +1118,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
         variants = (
             (
                 "expired-smoke",
-                write_variant("expired-smoke-report", expires_at="2000-01-01T00:00:00+00:00"),
+                write_variant(
+                    "expired-smoke-report", expires_at="2000-01-01T00:00:00+00:00"
+                ),
                 "expired",
             ),
             (
@@ -992,8 +1135,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
             ),
         )
         for run_name, report_path, message in variants:
-            with self.subTest(report=run_name), self.assertRaisesRegex(
-                ConfigurationFailure, message
+            with (
+                self.subTest(report=run_name),
+                self.assertRaisesRegex(ConfigurationFailure, message),
             ):
                 run_build(
                     profile_path=self.profile_path,

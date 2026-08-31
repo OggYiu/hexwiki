@@ -152,9 +152,7 @@ class SandboxPolicy:
             raise SandboxViolation("drive-qualified paths are not allowed")
         candidate_key = normalized[1:] if normalized.startswith("/") else normalized
         parts = [part for part in candidate_key.split("/") if part not in {"", "."}]
-        if any(part == ".." for part in parts) or (
-            parts and parts[0].startswith("~")
-        ):
+        if any(part == ".." for part in parts) or (parts and parts[0].startswith("~")):
             raise SandboxViolation("path traversal is not allowed")
         return parts
 
@@ -197,9 +195,8 @@ class SandboxPolicy:
 
     def is_immutable(self, key: str) -> bool:
         relative = self.relative(key)
-        return (
-            relative.name == "WIKI_GUIDE.md"
-            or bool(relative.parts and relative.parts[0] in self.IMMUTABLE_ROOTS)
+        return relative.name == "WIKI_GUIDE.md" or bool(
+            relative.parts and relative.parts[0] in self.IMMUTABLE_ROOTS
         )
 
     def require_mutable(self, key: str) -> Path:
@@ -219,7 +216,11 @@ class SandboxPolicy:
 def _guarded_backend(wiki_dir: Path, recorder: TranscriptRecorder) -> tuple[Any, Any]:
     try:
         from deepagents.backends import FilesystemBackend
-        from deepagents.backends.protocol import EditResult, FileUploadResponse, WriteResult
+        from deepagents.backends.protocol import (
+            EditResult,
+            FileUploadResponse,
+            WriteResult,
+        )
         from langchain_core.tools import tool
     except ImportError as error:
         raise RuntimeError(
@@ -271,7 +272,9 @@ def _guarded_backend(wiki_dir: Path, recorder: TranscriptRecorder) -> tuple[Any,
                     continue
                 if immutable:
                     responses.append(
-                        FileUploadResponse(path=file_path, error="immutable_current_run_evidence")
+                        FileUploadResponse(
+                            path=file_path, error="immutable_current_run_evidence"
+                        )
                     )
                 else:
                     responses.extend(super().upload_files([(file_path, content)]))
@@ -328,7 +331,10 @@ class StageRequest:
                 raise ValueError(f"stage output is not wiki-relative: {path}")
         for key in ("files", "folders", "missing", "orphans"):
             value = self.payload.get(key)
-            if isinstance(value, (list, tuple, set, dict)) and len(value) > NOTES_PER_WRITE_STAGE:
+            if (
+                isinstance(value, (list, tuple, set, dict))
+                and len(value) > NOTES_PER_WRITE_STAGE
+            ):
                 raise ValueError(
                     f"stage {self.label!r} payload names {len(value)} {key}; maximum is two"
                 )
@@ -357,7 +363,9 @@ class StageExecutor(Protocol):
 
 
 def _retryable(error: BaseException) -> bool:
-    if isinstance(error, (PermissionError, FileNotFoundError, SandboxViolation, plan.PlanError)):
+    if isinstance(
+        error, (PermissionError, FileNotFoundError, SandboxViolation, plan.PlanError)
+    ):
         return False
     name = type(error).__name__.casefold()
     markers = (
@@ -431,7 +439,9 @@ class DeepAgentExecutor:
                 {"event": "agent-update", "stage": request.label, "update": chunk},
             )
             for update in (chunk or {}).values():
-                messages = update.get("messages", []) if isinstance(update, dict) else []
+                messages = (
+                    update.get("messages", []) if isinstance(update, dict) else []
+                )
                 for message in messages if isinstance(messages, list) else []:
                     content = getattr(message, "content", None)
                     if isinstance(content, str) and content.strip():
@@ -504,7 +514,9 @@ class DeepAgentExecutor:
                         "error": str(error),
                     },
                 )
-                if attempt >= self.runtime.limits.stage_attempts or not _retryable(error):
+                if attempt >= self.runtime.limits.stage_attempts or not _retryable(
+                    error
+                ):
                     raise
                 self.sleep(self.runtime.limits.stage_retry_seconds[attempt - 1])
         raise RuntimeError(f"stage failed without an exception: {last}")
@@ -536,7 +548,9 @@ def _page_ranges(profile: dict[str, Any]) -> list[tuple[int, int]]:
     size = -(-len(pages) // parts)
     return [
         (chunk[0], chunk[-1])
-        for chunk in (pages[offset : offset + size] for offset in range(0, len(pages), size))
+        for chunk in (
+            pages[offset : offset + size] for offset in range(0, len(pages), size)
+        )
         if chunk
     ]
 
@@ -550,10 +564,18 @@ def _pages_clause(pages: list[int]) -> str:
 
 def _survey_prompt(raw_name: str, task: str, schema: str, extra: str = "") -> str:
     return (
-        f"SURVEY ONLY. Read `_ingest/{raw_name}` to the end using offsets. {task}\n\n"
-        "Do not write wiki notes. Every pdf_pages value must occur in a `pdf page N` "
-        "marker in the staged source. Write the named `_plan/` file as valid JSON only, "
-        "without fences. Keep fields terse so the artifact arrives whole.\n\n"
+        f"SURVEY ONLY. Read `_ingest/{raw_name}` to the end using offsets. The survey "
+        "decides what the wiki will contain: a functional unit omitted here cannot be "
+        "recovered by the later completeness check. Work through the requested material "
+        f"in source order. {task}\n\n"
+        "Do not write wiki notes. The staged source is the only authority: do not use "
+        "outside knowledge, a prior wiki, or an inferred fact the pages do not state. "
+        "Every pdf_pages value must occur in a `pdf page N` marker in the staged source. "
+        "Summaries are terse locators for later writers, not substitutes for the pages, "
+        "but they must preserve the names, dates, quantities, reasoning moves, and "
+        "evidential cautions that distinguish one unit from another. Write the named "
+        "`_plan/` file as valid JSON only, without fences. Keep fields terse so the "
+        "artifact arrives whole.\n\n"
         f"Schema:\n{schema}{extra}"
     )
 
@@ -582,8 +604,7 @@ def _survey_correction_targets(
     if "concept" in lowered:
         families.add("concepts")
     if any(
-        token in lowered
-        for token in ("people", "person", "author", "claim", "motif")
+        token in lowered for token in ("people", "person", "author", "claim", "motif")
     ):
         families.add("roster")
 
@@ -614,12 +635,21 @@ def run_survey(
             "outline",
             _survey_prompt(
                 raw_name,
-                "Enumerate the scope's ordered sections and argument architecture. "
+                "Enumerate the scope's own architecture and argument. Sections are the "
+                "source's divisions in its own order, whether marked by headings or a clear "
+                "shift of subject. Argument steps are the ordered inference from the opening "
+                "move to the close; keep 4-8 distinct steps and do not replace the source's "
+                "sequence with a new editorial outline. `establishes` records only what the "
+                "pages actually support, while `leaves_open` records questions or causal "
+                "choices the scope does not settle. "
                 + plan.count_clause(
                     profile,
                     "section_notes",
                     floor_text="The source demonstrably has at least {n} sections.",
-                    open_text="Use exactly the divisions the source makes; do not pad or merge.",
+                    open_text=(
+                        "Use exactly the divisions the source makes; do not split one to reach "
+                        "a count or merge two because the list looks short."
+                    ),
                 ),
                 plan.OUTLINE_SCHEMA,
             ),
@@ -631,7 +661,14 @@ def run_survey(
             _survey_prompt(
                 raw_name,
                 "Enumerate every distinct substantive, methodological, and epistemic "
-                "concept. All three kinds are mandatory. "
+                "concept. Substantive concepts are phenomena, mechanisms, categories, and "
+                "recurring effects. Methodological concepts are comparisons, criteria, and "
+                "inference rules, including what each rule licenses and does not. Epistemic "
+                "concepts are load-bearing assumptions and unresolved competing readings. "
+                "Give distinct mechanisms distinct entries even when they co-occur; a broad "
+                "topic label must not hide a narrower idea a reader would search for. All "
+                "three kinds are mandatory: an all-substantive list has catalogued subject "
+                "matter and missed the reasoning. "
                 + plan.count_clause(
                     profile,
                     "concept_notes",
@@ -647,9 +684,17 @@ def run_survey(
             "roster",
             _survey_prompt(
                 raw_name,
-                "Enumerate every named person, the document author as the sole `author` "
-                "group member, substantive claims with evidence limits, and recurring "
-                "motifs. Do not turn a one-off feature into a motif. "
+                "Write three complete inventories. PEOPLE includes every named person, with "
+                "the document author as the sole `author` group member. Put everyone else "
+                "into a small number of broad role groups (two to four is usual), because "
+                "each group becomes one roster note. Each caution must state the person's "
+                "in-scope source status or interpretive risk, not a generic warning. CLAIMS "
+                "records each substantive claim, its owner, the actual in-scope support, and "
+                "the specific break in that support. MOTIFS includes only features recurring "
+                "across several episodes and important to the source's comparison. Look "
+                "beyond visual form when the pages warrant it: recurring effects, traces, "
+                "responses, social consequences, or transmission patterns may matter too. "
+                "Do not turn a one-off feature into a motif. "
                 + plan.count_clause(
                     profile,
                     "claims",
@@ -675,8 +720,14 @@ def run_survey(
                 _survey_prompt(
                     raw_name,
                     f"Read only PDF pages {first}-{last}. Enumerate every distinct narrated "
-                    "incident, observation, experiment, record, or worked example, including "
-                    f"brief mentions and compilations. {count}",
+                    "incident, encounter, observation, experiment, record, transaction, or "
+                    "worked example, including one-sentence mentions with weak or absent "
+                    "apparatus. Do not merge incidents by theme and do not filter by "
+                    "importance: a brief entry is still useful when its support field says "
+                    "exactly how little the scope provides. Where the source presents three "
+                    "or more records together as a compilation, survey, chronicle, or series, "
+                    "add one compilation entry for the set in addition to any distinct member "
+                    f"episodes; it preserves the source's claim about the body as a whole. {count}",
                     plan.EPISODES_SCHEMA,
                 ),
                 {"kind": "episodes", "part": index, "first": first, "last": last},
@@ -727,9 +778,15 @@ def run_survey(
             _execute(
                 executor,
                 f"survey-audit:{index}",
-                f"Re-read `_ingest/{raw_name}` only over PDF pages {first}-{last}. Existing "
-                f"episode slugs are {known}. Append to `_plan/{filename}` only genuinely "
-                "missed brief incidents; otherwise change nothing. Preserve all prior entries.",
+                f"Re-read `_ingest/{raw_name}` only over PDF pages {first}-{last}, in order, "
+                "looking specifically for what a first reading skips: an incident in one "
+                "clause, a dated observation inside a list, a record attributed to a named "
+                "collection or intermediary, a second-hand account used for a passing point, "
+                "or a compilation whose collective role is distinct from its members. "
+                f"Existing episode slugs are {known}. Append to `_plan/{filename}` only "
+                "genuinely missed entries; otherwise change nothing. Preserve every prior "
+                "entry without removing, reordering, or rewording it, and never duplicate one "
+                "under another slug.",
                 (f"_plan/{filename}",),
                 {"kind": "episode-audit", "part": index, "known": known},
                 allow_unchanged=True,
@@ -751,25 +808,67 @@ def stage_structure(
 ) -> None:
     chapter = inventory["chapter"]
     chapter_path = f"chapters/{chapter['slug']}.md"
+    chapter_pages = sorted(
+        {page for section in inventory["sections"] for page in section["pdf_pages"]}
+    )
+    steps = "\n".join(
+        f"  {index}. {step}" for index, step in enumerate(chapter["argument_steps"], 1)
+    )
+    sections = "\n".join(
+        f"  {section['order']}. sections/{section['slug']}.md — "
+        f"{section['title']!r} (PDF pages {section['pdf_pages']}): "
+        f"{section['summary']}"
+        for section in inventory["sections"]
+    )
     _execute(
         executor,
         "structure:chapter",
-        f"Write exactly `{chapter_path}` (type Chapter). Reconstruct the organizing "
-        f"question and ordered inference from this inventory: {json.dumps(chapter)}. Link "
-        "every planned section, distinguish what the scope establishes from what it leaves "
-        f"open, identify the evidential hinge, and append a {date} [{writer}] log entry.",
+        f"STRUCTURE — CHAPTER HUB. Write exactly `{chapter_path}` (type Chapter), the "
+        "single hub from which a reader can reconstruct this scope's architecture. "
+        f"{_pages_clause(chapter_pages)} Read the pages for the source's own progression; "
+        "the survey below is a locator and build contract, not a substitute for them.\n\n"
+        f"Organizing question: {chapter['organizing_question']}\n\n"
+        "Reconstruct the ordered inference as a numbered list using every surveyed step. "
+        "For each move, state what the preceding material supports and where an assumption "
+        "enters. Then give an ordered linked list of every section, an explicit `What this "
+        "establishes` versus `What it leaves open` pair, and the evidential hinge where the "
+        "argument first needs more than the preceding pages supply. Do not replace the "
+        "source's sequence with a smoother thesis of your own.\n\n"
+        f"Surveyed argument steps:\n{steps}\n\n"
+        f"Planned sections, in source order:\n{sections}\n\n"
+        f"Append one `{date} [{writer}] structure: ...` log entry.",
         (chapter_path,),
         {"kind": "chapter", "item": chapter},
     )
     for section in inventory["sections"]:
         path = f"sections/{section['slug']}.md"
+        section_pages = set(section["pdf_pages"])
+        related_cases = [
+            f"cases/{item['slug']}.md"
+            for item in inventory["episodes"]
+            if item["section_order"] == section["order"]
+        ]
+        related_concepts = [
+            f"concepts/{item['slug']}.md"
+            for item in inventory["concepts"]
+            if section_pages.intersection(item["pdf_pages"])
+        ]
         _execute(
             executor,
             f"structure:section-{section['order']:02d}",
+            f"STRUCTURE — SECTION {section['order']} OF {len(inventory['sections'])}. "
             f"Write exactly `{path}` (type Section), titled {section['title']!r}. "
-            f"{_pages_clause(section['pdf_pages'])} Explain the section in source order, "
-            "its role, its limits, and link the chapter and related planned notes. "
-            f"Append a {date} [{writer}] structure log entry.",
+            f"{_pages_clause(section['pdf_pages'])} Write from those pages, not from the "
+            f"survey summary: {section['summary']}\n\n"
+            "Follow the material in source order. Explain the division's function in the "
+            "larger inference, preserve its named examples and methodological cautions, "
+            "link back to the Chapter hub, link forward to the planned cases and concepts "
+            "below, and end with what this section does not establish. A section note is "
+            "not a topical abstract; it must preserve the progression and caveats that make "
+            "this division distinct.\n\n"
+            f"Related planned cases: {related_cases or ['(none)']}\n"
+            f"Related planned concepts: {related_concepts or ['(none)']}\n\n"
+            f"Append one `{date} [{writer}] structure: ...` log entry.",
             (path,),
             {"kind": "section", "item": section, "chapter": chapter},
         )
@@ -785,14 +884,30 @@ def stage_cases(
     for index, items in enumerate(groups, 1):
         paths = tuple(f"cases/{item['slug']}.md" for item in items)
         pages = [page for item in items for page in item["pdf_pages"]]
+        listing = "\n".join(
+            f"- {path} — {item['title']!r} (PDF pages {item['pdf_pages']})\n"
+            f"  narrated: {item['summary']}\n"
+            f"  surveyed support and limits: {item['support']}"
+            for path, item in zip(paths, items, strict=True)
+        )
         _execute(
             executor,
             f"cases:{index}",
-            f"Write exactly these separate Case Dossier notes: {list(paths)}. "
-            f"Inventory: {json.dumps(items, ensure_ascii=False)}. {_pages_clause(pages)} "
-            "Each dossier must give the attributed reported account, source chain, use in "
-            "the argument, and explicit Evidence limits naming support that is absent. "
-            f"Append one {date} [{writer}] cases log entry.",
+            f"CASE DOSSIERS — BATCH {index} OF {len(groups)}. Write exactly the separate "
+            "notes listed below; never merge two incidents because they share a theme.\n\n"
+            f"{listing}\n\n{_pages_clause(pages)} Read each gateway before writing. The "
+            "survey identifies the episode; the page supplies the account. Preserve every "
+            "specific the scope gives—names, dates, places, quantities, duration, sequence, "
+            "physical details, and uncertainty—rather than generalizing them away.\n\n"
+            "Each Case Dossier uses the guide's exact order: attributed `Reported account`; "
+            "`Source chain` naming intermediaries and any applicable apparatus entry; `Use "
+            "in the argument`; and mandatory `Evidence limits`. The limits section must say "
+            "both what support exists and what the scope does not supply: for example no "
+            "second account, named investigator, primary record, measurement, date, or "
+            "independent source, when that absence is actually visible in the pages. A "
+            "briefly narrated incident deserves a brief dossier with a precise limit, not "
+            "padding or omission. Finish with Connections and direct page-gateway Sources. "
+            f"Append one `{date} [{writer}] cases: ...` log entry.",
             paths,
             {"kind": "cases", "items": items},
         )
@@ -808,14 +923,33 @@ def stage_concepts(
     for index, items in enumerate(groups, 1):
         paths = tuple(f"concepts/{item['slug']}.md" for item in items)
         pages = [page for item in items for page in item["pdf_pages"]]
+        listing = "\n".join(
+            f"- {path} — {item['title']!r} [{item['kind']}] "
+            f"(PDF pages {item['pdf_pages']}): {item['summary']}"
+            for path, item in zip(paths, items, strict=True)
+        )
         _execute(
             executor,
             f"concepts:{index}",
-            f"Write exactly these distinct Concept notes: {list(paths)}. Inventory: "
-            f"{json.dumps(items, ensure_ascii=False)}. {_pages_clause(pages)} Each note "
-            "defines the idea, explains its use, links every instance in scope, and gives "
-            "the kind-specific guardrail required by the guide. Distinguish a supported weak "
-            f"claim from an unsupported strong one. Append one {date} [{writer}] log entry.",
+            f"CONCEPTS — BATCH {index} OF {len(groups)}. Write exactly one distinct note "
+            f"for each item below; do not merge mechanisms merely because they co-occur.\n\n"
+            f"{listing}\n\n{_pages_clause(pages)} Read those gateways before writing. "
+            "Define each idea, explain the work it does in the source's reasoning, and keep "
+            "the source's label distinct from any claim about what exists outside the text.\n\n"
+            "Every Concept note needs `## Instances in scope`. Run one focused grep over "
+            "`cases/` for the concept's vocabulary and close synonyms, read every dossier "
+            "that hits, and link every genuine instance with a clause explaining how it "
+            "qualifies. Do not list only the examples remembered from the current pages.\n\n"
+            "Give each reusable rule one canonical home. If another concept owns the same "
+            "method or assumption, link to it instead of repeating a weaker paraphrase. For "
+            "a substantive concept, add `Evidence status` instance by instance and distinguish "
+            "allegation from support by a document, measurement, or named investigation. For "
+            "a methodological or epistemic concept, add `What this licenses and what it does "
+            "not` with explicit `Supports`, `Does not support`, and `Controls absent in scope` "
+            "lists. State a weak supported inference and the stronger tempting inference the "
+            "material does not establish; if the two could be swapped unnoticed, the "
+            "guardrail is too vague. Cite direct gateways and append one "
+            f"`{date} [{writer}] concepts: ...` log entry.",
             paths,
             {"kind": "concepts", "items": items},
         )
@@ -832,10 +966,16 @@ def stage_people(
         _execute(
             executor,
             "people:author",
-            f"Write exactly `{path}` (type Person) about {person['name']}'s role in this "
-            "scope, not a biography. Separate compilation, interpretation, caveats, and "
-            f"auditable moves. {_pages_clause(person['pdf_pages'])} Append one {date} "
-            f"[{writer}] people log entry.",
+            f"PEOPLE — DOCUMENT AUTHOR. Write exactly `{path}` (type Person) about "
+            f"{person['name']}'s role in this scope, never a biography. "
+            f"{_pages_clause(person['pdf_pages'])} Read the gateways and distinguish what "
+            "the author compiles from what they interpret, where selection or sequence does "
+            "rhetorical work, which cautions the author states, which causal or comparative "
+            "moves a reader should audit, and what the selected pages leave unresolved. "
+            f"The survey records this role: {person['role']}; and this caution: "
+            f"{person['caution']}. Preserve and substantiate both rather than replacing them "
+            "with generic prose. Link the Chapter and the synthesis notes that audit these "
+            f"moves. Append one `{date} [{writer}] people: ...` log entry.",
             (path,),
             {"kind": "author", "item": person},
         )
@@ -844,13 +984,28 @@ def stage_people(
         if group == plan.AUTHOR_GROUP:
             continue
         path = f"people/{group}.md"
+        pages = [page for person in members for page in person["pdf_pages"]]
+        rows = "\n".join(
+            f"- {person['name']} (PDF pages {person['pdf_pages']}): role="
+            f"{person['role']!r}; caution={person['caution']!r}"
+            for person in members
+        )
         _execute(
             executor,
             f"people:{group}",
-            f"Write exactly `{path}` (type Person) as a role roster for these people only: "
-            f"{json.dumps(members, ensure_ascii=False)}. Use a table with role, linked "
-            "appearance, and caution columns; stay within the source. Append one "
-            f"{date} [{writer}] people log entry.",
+            f"PEOPLE — ROLE ROSTER. Write exactly `{path}` (type Person) for these "
+            f"{len(members)} surveyed people and no others:\n{rows}\n\n"
+            f"{_pages_clause(pages)} Read the relevant gateways. Run one focused grep over "
+            "`cases/` to locate every appearance of the surveyed names, then write a literal "
+            "table with `Name`, `Role in this scope`, `Where they appear` (linked), and `What "
+            "to be careful about`. Every surveyed person gets exactly one row. The caution "
+            "column is evidential: preserve and expand each surveyed caution into the "
+            "person's actual source status—direct statement, reported account, anonymous or "
+            "named intermediary, unreproduced record, translation, interpretation, or other "
+            "limit the pages support—instead of substituting a generic warning. Below the "
+            "table, explain what the role group has in common and how the source's reliance "
+            "on it should be read. Add no outside biography or unlisted person. Append one "
+            f"`{date} [{writer}] people: ...` log entry.",
             (path,),
             {"kind": "people-roster", "group": group, "items": members},
         )
@@ -862,36 +1017,74 @@ def stage_synthesis(
     date: str,
     writer: str,
 ) -> None:
+    steps = "\n".join(
+        f"  {index}. {step}"
+        for index, step in enumerate(inventory["chapter"]["argument_steps"], 1)
+    )
+    claims = "\n".join(
+        f"  - claim={item['claim']!r}; owner={item['owner']!r}; "
+        f"evidence={item['evidence']!r}; limit={item['limit']!r}"
+        for item in inventory["claims"]
+    )
+    motifs = ", ".join(str(item) for item in inventory["motifs"])
+    episodes = "\n".join(
+        f"  - cases/{item['slug']}.md — {item['title']}"
+        for item in inventory["episodes"]
+    )
     tasks = [
         (
             "argument-map",
             "Synthesis",
-            "Map the ordered inference. For each move name its support and assumption; end "
-            "where the argument outruns the evidence.",
+            "Map the source's inference chain as an ordered numbered list. For every move, "
+            "name the in-scope support, the assumption or category shift it requires, and "
+            "the section or concept note where a reader can audit it. End at the point where "
+            "the argument first outruns its evidence; do not replace the source's sequence "
+            f"with a smoother thesis. Surveyed steps:\n{steps}",
         ),
         (
             "claim-evidence-matrix",
             "Synthesis",
             "Build a literal table with Claim, Owner, In-scope evidence, Evidential limit, "
-            "and linked Notes columns using every surveyed claim.",
+            "and linked Notes columns. Include every surveyed claim below, then add only a "
+            "further substantive claim you actually find while reading the existing notes. "
+            "The limit column is the point of the table: state the missing record, control, "
+            "measurement, independence, or discriminating evidence specifically rather than "
+            f"writing `uncertain`. Surveyed claims:\n{claims}",
         ),
         (
             "motif-matrix",
             "Synthesis",
-            "Build a literal table with one row per case and one column per motif. Mark a "
-            "cell only when that case's page states the feature; blanks are valid.",
+            "Build a literal Markdown table—not a thematic essay—with one linked Case "
+            "Dossier per row and one genuinely recurring feature per column. Start from the "
+            f"surveyed motifs ({motifs}) and add only features that recur in the dossiers. "
+            "Do not let surface appearance crowd out other feature families that the "
+            "source uses in comparison, such as bodily or mechanical effects, material "
+            "traces, "
+            "responses, social consequences, or transmission patterns. Every marked cell is "
+            "a claim about that case's cited page: read the dossier or gateway and mark only "
+            "what it states; a blank is correct when support is absent. Below the grid, state "
+            "how the rows and columns were selected and why recurrence does not by itself "
+            "establish one object, mechanism, or cause. Planned case dossiers:\n"
+            f"{episodes}",
         ),
         (
             "critical-reading",
             "Synthesis",
-            "Set genuine strengths against concrete controls absent in this scope, including "
-            "selection, source dependence, transmission, and compression where applicable.",
+            "Set the argument's genuine strengths against the concrete controls it lacks. "
+            "Show where each applicable risk bites by linking notes: selection of examples, "
+            "heterogeneous source quality, non-independent transmission, translation or "
+            "category drift, compression of records into summary, missing comparison sets, "
+            "and absent measurements. This is an audit rather than a dismissal, so state "
+            "what the source's method can validly establish before stating what it cannot.",
         ),
         (
             "open-questions",
             "Open Question",
-            "State material questions the scope leaves unresolved and evidence that could "
-            "discriminate readings; never list wiki backlog or outside chapters.",
+            "State the material and methodological questions this scope leaves unresolved. "
+            "For each, name the primary record, operational definition, comparison set, "
+            "independence check, or discriminating observation that could settle it, and link "
+            "the note that exposes the gap. Do not answer from later divisions, list wiki "
+            "backlog, or merely repeat the source's rhetorical questions.",
         ),
     ]
     for index, (slug, note_type, instruction) in enumerate(tasks, 1):
@@ -899,9 +1092,13 @@ def stage_synthesis(
         _execute(
             executor,
             f"synthesis:{slug}",
-            f"Write exactly `{path}` (type {note_type}), synthesis task {index}/5. "
-            f"{instruction} Survey inventory: {json.dumps(inventory, ensure_ascii=False)}. "
-            f"Append one {date} [{writer}] synthesis log entry.",
+            f"SYNTHESIS — TASK {index} OF {len(tasks)}. Write exactly `{path}` (type "
+            f"{note_type}). Synthesis analyses the source's reasoning; it does not restate "
+            "the scope or invent a verdict. Use `ls` and focused `grep` over the existing "
+            "Chapter, Section, Case Dossier, Concept, and Person notes, follow their direct "
+            "gateway links, and cite only pages you read. Link the notes that let a reader "
+            f"audit every row or inference.\n\n{instruction}\n\nAppend one "
+            f"`{date} [{writer}] synthesis: ...` log entry.",
             (path,),
             {"kind": "synthesis", "slug": slug, "note_type": note_type},
         )
@@ -913,21 +1110,53 @@ def stage_navigation(
     date: str,
     writer: str,
 ) -> None:
+    chapter = inventory["chapter"]
+    chapter_path = f"chapters/{chapter['slug']}.md"
+    argument = "\n".join(
+        f"  {index}. {step}" for index, step in enumerate(chapter["argument_steps"], 1)
+    )
+    sections = "\n".join(
+        f"  {item['order']}. sections/{item['slug']}.md — {item['title']}"
+        for item in inventory["sections"]
+    )
     _execute(
         executor,
         "navigation:overview",
-        "Write exactly `overview.md` (type Overview): orient the reader to the question, "
-        "argument, established/open distinction, neutral-reading rule, chapter, synthesis, "
-        f"and source guides. Append one {date} [{writer}] navigation log entry.",
+        "NAVIGATION — OVERVIEW. Every semantic note now exists. Use `ls` on every folder "
+        "and read the Chapter, synthesis, and source-guide notes before writing exactly "
+        "`overview.md` (type Overview), the single orientation note for the whole scope.\n\n"
+        f"State the organizing question: {chapter['organizing_question']}\n\n"
+        "Give the source's argument as a short numbered list grounded in the surveyed "
+        "sequence below, not as a new thesis. Preserve the major categories of evidence and "
+        "recurring effects the existing notes treat as load-bearing. Then give an explicit "
+        "`What this establishes` versus `What it leaves open` pair. State the neutral-reading "
+        "rule concretely: reported accounts are not verified events; recurring descriptions "
+        "do not alone establish a shared mechanism; and a source's labels do not by "
+        "themselves settle ontology, wherever those distinctions apply. Link the Chapter, "
+        "all five synthesis notes, source-and-scope, extraction-and-audit, and the page map.\n\n"
+        f"Surveyed argument sequence:\n{argument}\n\n"
+        f"Append one `{date} [{writer}] navigation: ...` log entry.",
         ("overview.md",),
         {"kind": "overview", "inventory": inventory},
     )
     _execute(
         executor,
         "navigation:reading-guide",
-        "Write exactly `reading-guide.md` (type Reading Guide): give a first-read path, "
-        "claim audit path to gateways, episode lookup workflow, page-map pointer, and exact "
-        f"scope warning. Append one {date} [{writer}] navigation log entry.",
+        "NAVIGATION — READING GUIDE. Use `ls` on every folder so every path below resolves, "
+        "then write exactly `reading-guide.md` (type Reading Guide). This note explains how "
+        "to use the wiki through concrete linked routes rather than describing its contents.\n\n"
+        f"First-read route: `{chapter_path}`, then these Section notes in source order:\n"
+        f"{sections}\n\n"
+        "Also provide: a case lookup route through `cases/index.md`; a concept and method "
+        "route through `concepts/index.md`; a recurrence route through "
+        "`synthesis/motif-matrix.md`; a claim-audit route from "
+        "`synthesis/claim-evidence-matrix.md` to a linked note and then its direct PDF-page "
+        "gateway; a critical route through the argument map, critical reading, and open "
+        "questions; and a page-first route through `reference/pdf-page-map.md`. Explain that "
+        "a Case Dossier separates reported account, use, source chain, and limits. End with "
+        "an exact scope-boundary warning: inclusion is not verification, unscoped material "
+        "cannot fill a gap, and the source-and-scope guide is authoritative. "
+        f"Append one `{date} [{writer}] navigation: ...` log entry.",
         ("reading-guide.md",),
         {"kind": "reading-guide", "inventory": inventory},
     )
@@ -1041,10 +1270,14 @@ def sweep_strays(wiki_dir: Path) -> list[str]:
         "_ingest",
         "_plan",
     }
-    allowed_root_files = set(lint.ROOT_TYPES) | lint.SPECIAL | {
-        "checksums.sha256",
-        "manifest.json",
-    }
+    allowed_root_files = (
+        set(lint.ROOT_TYPES)
+        | lint.SPECIAL
+        | {
+            "checksums.sha256",
+            "manifest.json",
+        }
+    )
     removed: list[str] = []
     for path in sorted(Path(wiki_dir).rglob("*")):
         if not path.is_file():
@@ -1077,8 +1310,7 @@ def review_and_repair(
     sleep: Any = time.sleep,
 ) -> dict[str, Any]:
     scope = {
-        int(page)
-        for page in profile["primary_pages"] + profile["apparatus_pages"]
+        int(page) for page in profile["primary_pages"] + profile["apparatus_pages"]
     }
     pages = review.load_pages_from_gateways(wiki_dir, scope)
     repaired: set[str] | None = None
