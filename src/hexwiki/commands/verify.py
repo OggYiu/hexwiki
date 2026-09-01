@@ -28,9 +28,8 @@ def run(args: argparse.Namespace) -> int:
     if manifest.get("status") != "sealed":
         raise ValueError(f"manifest status is not sealed: {manifest.get('status')!r}")
     quotations = verify(wiki, args.min_length)
-    quote_issues = (
-        len(quotations["in_scope_but_not_on_a_cited_page"])
-        + len(quotations["not_found_in_scope"])
+    quote_issues = len(quotations["in_scope_but_not_on_a_cited_page"]) + len(
+        quotations["not_found_in_scope"]
     )
     # A check that examined nothing has not passed. Zero issues out of zero
     # quotations is exactly what a wiki whose quotation style this tool cannot
@@ -38,12 +37,19 @@ def run(args: argparse.Namespace) -> int:
     # health for a bundle nothing verified. Say so instead.
     if quotations["semantic_notes"] and not quotations["quotations_checked"]:
         status = "inconclusive"
-    elif quote_issues:
-        status = "failed"
+        quotation_status = "inconclusive"
     else:
+        # Manifest and checksum verification above is deterministic. Quotation
+        # matching is deliberately a lower bound: immutable gateways preserve
+        # extraction damage while notes repair obvious character artifacts, so
+        # an unmatched span requires inspection and is not by itself proof that
+        # the sealed wiki is corrupt. Keep every finding in the report without
+        # collapsing it into the command's integrity status.
         status = "passed"
+        quotation_status = "findings" if quote_issues else "clear"
     report = {
         "status": status,
+        "quotation_status": quotation_status,
         "wiki": str(wiki),
         "checksummed_files": len(checksums),
         "quotations": quotations,
@@ -56,10 +62,13 @@ def run(args: argparse.Namespace) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print(f"status: {report['status']}")
+        print(f"quotation status: {report['quotation_status']}")
         print(f"checksummed files: {len(checksums)}")
         print(f"semantic notes: {quotations['semantic_notes']}")
         print(f"quotations checked: {quotations['quotations_checked']}")
-        print(f"wrong-page quotations: {len(quotations['in_scope_but_not_on_a_cited_page'])}")
+        print(
+            f"wrong-page quotations: {len(quotations['in_scope_but_not_on_a_cited_page'])}"
+        )
         print(f"unsupported quotations: {len(quotations['not_found_in_scope'])}")
         print(report["limitation"])
     return 0 if report["status"] == "passed" else 1

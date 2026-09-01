@@ -86,6 +86,10 @@ hexwiki query wikis/book-001 "search terms"
 Deterministic gates prove source identity, structure, provenance mechanics, and
 tree integrity. Without a suitable independent gold reference, they do not
 prove that a wiki selected, weighted, or synthesized the source perfectly.
+`hexwiki verify` therefore reports quotation matching separately as `clear`,
+`findings`, or `inconclusive`: findings are preserved as a lower-bound audit
+without overriding a valid sealed manifest, while an inconclusive check still
+returns nonzero because it examined no substantive quotation.
 
 ## Configuration and responsibility
 

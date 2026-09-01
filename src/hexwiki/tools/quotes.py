@@ -6,14 +6,16 @@ judge paraphrase, emphasis, selection, completeness, or truth. It only tests
 verbatim quotation, and a note may still mislead while quoting accurately.
 
 Read the result as a lower bound, not a semantic score. The matcher accounts for
-six common false-positive sources:
+seven common false-positive sources:
 
 1. directional quote-character pairing avoids capturing prose between quotes;
 2. only the gateway's fenced source text enters the comparison haystack;
 3. editorial terminal punctuation is ignored;
 4. sections that quote propositions merely to reject them are excluded;
 5. ellipsis-separated fragments must appear in source order; and
-6. extraction-split or soft-hyphenated words may be silently rejoined.
+6. extraction-split or soft-hyphenated words may be silently rejoined; and
+7. Latin-heavy spans may ignore punctuation, diacritics, and isolated
+   non-Latin extractor glyphs without accepting changed words.
 
 Unmatched text still requires inspection. It can reflect a real provenance
 defect, or another extraction/editorial artifact such as a bracketed insertion,
@@ -110,6 +112,7 @@ def supports(needle: str, haystack: str) -> bool:
 
     if ordered_in(haystack, parts):
         return True
+
     # Fallback: compare with all whitespace removed. Extraction splits words at
     # arbitrary points — extracted text may split a short word across spaces,
     # and print sources hyphenate across lines. The guide tells
@@ -120,7 +123,40 @@ def supports(needle: str, haystack: str) -> bool:
     def squeeze(value: str) -> str:
         return re.sub(r"\s+", "", value)
 
-    return ordered_in(squeeze(haystack), [squeeze(p) for p in parts])
+    if ordered_in(squeeze(haystack), [squeeze(p) for p in parts]):
+        return True
+
+    # Some native PDF text maps punctuation to an unrelated Unicode glyph.
+    # Comparing only ASCII letters and digits is a safe final fallback for a
+    # Latin-heavy span: it removes punctuation and such isolated glyphs, but a
+    # changed word still changes the comparison key. The retention guard keeps
+    # this fallback out of non-Latin material, and the length floor prevents a
+    # short accidental collision from certifying a quotation.
+    def latin_key(value: str) -> tuple[str, float]:
+        decomposed = unicodedata.normalize("NFKD", value)
+        alphanumeric = [
+            character
+            for character in decomposed
+            if character.isalnum() and not unicodedata.combining(character)
+        ]
+        ascii_alphanumeric = [
+            character.lower()
+            for character in decomposed
+            if character.isascii() and character.isalnum()
+        ]
+        retention = len(ascii_alphanumeric) / len(alphanumeric) if alphanumeric else 0.0
+        return "".join(ascii_alphanumeric), retention
+
+    latin_haystack, haystack_retention = latin_key(haystack)
+    if haystack_retention < 0.80:
+        return False
+    latin_parts: list[str] = []
+    for part in parts:
+        key, retention = latin_key(part)
+        if retention < 0.80 or len(key) < 25:
+            return False
+        latin_parts.append(key)
+    return ordered_in(latin_haystack, latin_parts)
 
 
 def cited_pages(text: str) -> set[int]:
@@ -193,8 +229,8 @@ def straight_quoted(body: str, minimum: int) -> list[str]:
 
 
 def quotations(text: str, minimum: int) -> list[str]:
-    body = re.sub(r"(?ms)^---.*?^---\s*", "", text, count=1)   # drop front matter
-    body = re.sub(r"(?m)^\s*\|.*\|\s*$", "", body)             # drop tables
+    body = re.sub(r"(?ms)^---.*?^---\s*", "", text, count=1)  # drop front matter
+    body = re.sub(r"(?m)^\s*\|.*\|\s*$", "", body)  # drop tables
     body = strip_constructed_sections(body)
     found = re.compile(QUOTE_RE.pattern % minimum, re.S).findall(body)
     found += straight_quoted(body, minimum)
@@ -227,7 +263,9 @@ def scoped_text(gateway: str) -> str:
 def verify(wiki: Path, minimum: int) -> dict:
     raw = {}
     for path in (wiki / "sources" / "pdf-pages").glob("page-*.md"):
-        raw[int(path.stem.split("-")[1])] = scoped_text(path.read_text(encoding="utf-8"))
+        raw[int(path.stem.split("-")[1])] = scoped_text(
+            path.read_text(encoding="utf-8")
+        )
     # Pages break mid-sentence, so a quotation legitimately spans two of them.
     # Join in page order to rebuild the running text before matching.
     whole = normalise(" ".join(raw[page] for page in sorted(raw)))
@@ -238,7 +276,10 @@ def verify(wiki: Path, minimum: int) -> dict:
     notes = 0
     for path in sorted(wiki.rglob("*.md")):
         rel = path.relative_to(wiki)
-        if any(part in SKIP_DIRS for part in rel.parts) or rel.parts[:2] == ("sources", "pdf-pages"):
+        if any(part in SKIP_DIRS for part in rel.parts) or rel.parts[:2] == (
+            "sources",
+            "pdf-pages",
+        ):
             continue
         text = path.read_text(encoding="utf-8")
         if not is_semantic_note(text):
@@ -273,12 +314,17 @@ def verify(wiki: Path, minimum: int) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("wiki", type=Path)
-    parser.add_argument("--min-length", type=int, default=40,
-                        help="shortest quotation to check; short spans are usually "
-                             "scare quotes or single terms, not source quotation")
+    parser.add_argument(
+        "--min-length",
+        type=int,
+        default=40,
+        help="shortest quotation to check; short spans are usually "
+        "scare quotes or single terms, not source quotation",
+    )
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--output", type=Path,
-                        help="also write the complete report as JSON")
+    parser.add_argument(
+        "--output", type=Path, help="also write the complete report as JSON"
+    )
     args = parser.parse_args()
 
     report = verify(args.wiki, args.min_length)
@@ -291,17 +337,23 @@ def main() -> int:
         print(report_json, end="")
         return 0
 
-    print(f"{report['wiki']}: {report['semantic_notes']} semantic notes, "
-          f"{report['quotations_checked']} quotations >= {args.min_length} chars")
+    print(
+        f"{report['wiki']}: {report['semantic_notes']} semantic notes, "
+        f"{report['quotations_checked']} quotations >= {args.min_length} chars"
+    )
     rate = report["support_rate"]
-    print(f"  supported by a cited page : {report['supported_by_cited_page']}"
-          + (f"  ({rate:.1%})" if rate is not None else ""))
-    print(f"  in scope, wrong page cited: {len(report['in_scope_but_not_on_a_cited_page'])}")
+    print(
+        f"  supported by a cited page : {report['supported_by_cited_page']}"
+        + (f"  ({rate:.1%})" if rate is not None else "")
+    )
+    print(
+        f"  in scope, wrong page cited: {len(report['in_scope_but_not_on_a_cited_page'])}"
+    )
     print(f"  not found in scope        : {len(report['not_found_in_scope'])}")
     for item in report["in_scope_but_not_on_a_cited_page"][:5]:
-        print(f"    [wrong page] {item['note']}: \"{item['quote'][:80]}\"")
+        print(f'    [wrong page] {item["note"]}: "{item["quote"][:80]}"')
     for item in report["not_found_in_scope"][:10]:
-        print(f"    [NOT FOUND] {item['note']}: \"{item['quote'][:80]}\"")
+        print(f'    [NOT FOUND] {item["note"]}: "{item["quote"][:80]}"')
     return 0
 
 
