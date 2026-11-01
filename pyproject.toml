@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "Pillow>=10,<13",
-    "PyMuPDF>=1.26,<2",
+    "PyMuPDF>=1.26,<3",
 ]
 
 [project.urls]
