@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Text Processing :: General",
 ]
 dependencies = [
-    "Pillow>=10,<13",
+    "Pillow>=10,<14",
     "PyMuPDF>=1.26,<2",
 ]
 
